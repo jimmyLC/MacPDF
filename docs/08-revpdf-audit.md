@@ -2,13 +2,13 @@
 
 | 項目 | 內容 |
 |---|---|
-| 目的 | 記錄對 RevPDF Desktop 的靜態觀察，作為 PDF Workbench 的功能對照 |
+| 目的 | 記錄對 RevPDF Desktop 的靜態觀察，作為 MacPDF 的功能對照 |
 | 對象 | RevPDF Editor 5.0.1（build 89） |
 | 分析日期 | 2026-11-02 |
 | 方法 | macOS bundle 結構、Mach-O 依賴、Dart AOT 字串/符號、`RevPdf_*` 匯出 API、l10n key、畫面原始檔路徑 |
 | 限制 | 靜態分析，未執行 App、未反編譯 Dart 原始碼、未做 runtime 行為驗證 |
 
-> **Clean-room note**：本文件只記錄功能與架構觀察，不包含 RevPDF 的程式碼、資產、圖示、翻譯或專有檔案。PDF Workbench 是獨立實作，與 RevPDF 無關。
+> **Clean-room note**：本文件只記錄功能與架構觀察，不包含 RevPDF 的程式碼、資產、圖示、翻譯或專有檔案。MacPDF 是獨立實作，與 RevPDF 無關。
 
 ---
 
@@ -186,7 +186,7 @@ Flutter / Dart AOT (App.framework)
 
 ## 4. Parity matrix
 
-| RevPDF 功能 | PDF Workbench | 階段 | 備註 |
+| RevPDF 功能 | MacPDF | 階段 | 備註 |
 |---|---|---|---|
 | 開檔/瀏覽/縮圖/目錄/搜尋 | 有 | M0 | PDFKit |
 | 多分頁 | 有 | M0 | NSDocument |
@@ -232,7 +232,7 @@ Flutter / Dart AOT (App.framework)
 
 ## 5. Deliberate differences
 
-| 項目 | RevPDF | PDF Workbench | 理由 |
+| 項目 | RevPDF | MacPDF | 理由 |
 |---|---|---|---|
 | UI 技術 | Flutter | SwiftUI/AppKit | 原生整合、較小、較快 |
 | PDF 引擎 | 自製 C++ + PDFium | PDFKit 優先 | 降低初期複雜度 |
@@ -262,7 +262,7 @@ Flutter / Dart AOT (App.framework)
 
 ---
 
-## 7. Lessons for PDF Workbench
+## 7. Lessons for MacPDF
 
 1. **功能廣度不是問題，深度才是**：RevPDF 的工具清單很完整，但真文字編輯/轉檔仍需大量工程。
 2. **PDF 沒有段落模型**：要真編輯，必須自建文字/字型/表格層；這是 M4 的原因。
@@ -278,6 +278,6 @@ Flutter / Dart AOT (App.framework)
 
 - 本文件僅為功能比較與架構觀察。
 - 不包含 RevPDF 的原始碼、二進位、資產、翻譯或商標使用。
-- PDF Workbench 是獨立產品，與 RevPDF 無關。
+- MacPDF 是獨立產品，與 RevPDF 無關。
 - 若未來需要引用 RevPDF 的介面截圖，需取得授權；目前不使用。
 - 「RevPDF」為其所有者商標；本專案不使用該名稱作為產品名。

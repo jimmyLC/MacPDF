@@ -1,4 +1,4 @@
-# PDF Workbench（暫名）產品需求文件
+# MacPDF 產品需求文件
 
 | 項目 | 內容 |
 |---|---|
@@ -433,7 +433,7 @@
 | N8 | Spotlight metadata | 檔案屬性 | P2 | 中 |
 | N9 | Shortcuts App | 自動化動作 | P2 | 中 |
 | N10 | AppleScript | 腳本控制 | P3 | 中 |
-| N11 | 命令列 | `pdfworkbench file.pdf` | P2 | 低 |
+| N11 | 命令列 | `macpdf file.pdf` | P2 | 低 |
 | N12 | Dock 選單 | 右鍵顯示最近文件、新視窗 | P1 | 低 |
 | N13 | 多螢幕視窗記憶 | 記住視窗位置、尺寸、所在螢幕 | P1 | 低 |
 
@@ -777,7 +777,7 @@
 ### 9.3 分層
 
 ```
-PDFWorkbenchApp (SwiftUI)
+MacPDFApp (SwiftUI)
 ├── AppShell
 │   ├── MainWindow / TabStrip
 │   ├── Toolbar / MenuCommands
@@ -848,7 +848,7 @@ protocol PDFOperation {
 
 - 開啟：原檔唯讀；所有編輯在記憶體。
 - 儲存：`Save` 覆寫前先寫 `.bak`；`Save As` 寫新檔。
-- 自動恢復：每 30 秒或每次操作後，寫 snapshot 到 `Application Support/PDFWorkbench/Recovery/<uuid>/`。
+- 自動恢復：每 30 秒或每次操作後，寫 snapshot 到 `Application Support/MacPDF/Recovery/<uuid>/`。
 - 原子寫入：`temp.pdf` → `rename()`。
 
 **OCR 流程**
@@ -991,7 +991,7 @@ enum FlowStep: Codable {
 ### 11.2 目錄
 
 ```
-~/Library/Application Support/PDFWorkbench/
+~/Library/Application Support/MacPDF/
 ├── Recovery/<document-uuid>/
 │   ├── manifest.json
 │   └── snapshot.pdf
@@ -1110,7 +1110,7 @@ enum FlowStep: Codable {
 
 請直接回覆編號與選擇，或修改功能表：
 
-1. **App 名稱**：PDF Workbench（暫名）／其他？
+1. **App 名稱**：MacPDF（已定）。
 2. **最低 macOS**：14 Sonoma（推薦）／13 Ventura／15 Sequoia？
 3. **介面語言**：繁中 + 英文（推薦）／只做繁中？
 4. **第一版範圍**：M1／M2／M3（推薦）？

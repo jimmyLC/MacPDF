@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 產品 | PDF Workbench |
+| 產品 | MacPDF |
 | 版本 | 0.2（Planning） |
 | 日期 | 2026-11-02 |
 | 範圍 | RevPDF 的四個旗艦能力：自然文字編輯、版本比對、Flows、進階輸出 |
@@ -380,7 +380,7 @@ enum FlowStep: Codable {
 }
 ```
 
-- JSON 存 `Application Support/PDFWorkbench/Flows/<uuid>.json`。
+- JSON 存 `Application Support/MacPDF/Flows/<uuid>.json`。
 - `schemaVersion` 用於 migration。
 - 可匯出/匯入 JSON。
 

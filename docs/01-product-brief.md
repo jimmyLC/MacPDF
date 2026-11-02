@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 產品 | PDF Workbench（暫名） |
+| 產品 | MacPDF |
 | 類型 | macOS 原生、local-first PDF 工作台 |
 | 版本 | 0.2（Planning） |
 | 日期 | 2026-11-02 |
@@ -13,7 +13,7 @@
 
 ## 1. Executive summary
 
-PDF Workbench 是一套 macOS 原生 PDF 工具，目標是用一個視窗完成大多數日常 PDF 工作：開啟、註解、整理頁面、填表、簽名、OCR、壓縮、塗黑、比對、批次處理。
+MacPDF 是一套 macOS 原生 PDF 工具，目標是用一個視窗完成大多數日常 PDF 工作：開啟、註解、整理頁面、填表、簽名、OCR、壓縮、塗黑、比對、批次處理。
 
 它跟多數競品最大的差別不是功能數量，而是三個原則：
 
@@ -216,7 +216,7 @@ PDF Workbench 是一套 macOS 原生 PDF 工具，目標是用一個視窗完成
 
 ## 10. Positioning statement
 
-> 對需要處理敏感 PDF 的 Mac 使用者，PDF Workbench 是一套原生、離線、不訂閱的 PDF 工作台。它讓你在同一個視窗完成註解、整理、OCR、塗黑、比對與批次輸出，而不必把文件上傳到任何地方。
+> 對需要處理敏感 PDF 的 Mac 使用者，MacPDF 是一套原生、離線、不訂閱的 PDF 工作台。它讓你在同一個視窗完成註解、整理、OCR、塗黑、比對與批次輸出，而不必把文件上傳到任何地方。
 
 ---
 

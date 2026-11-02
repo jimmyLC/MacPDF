@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 產品 | PDF Workbench |
+| 產品 | MacPDF |
 | 版本 | 0.2（Planning） |
 | 日期 | 2026-11-02 |
 | 目標平台 | macOS 14+，Universal 2（arm64 + x86_64） |
@@ -103,7 +103,7 @@
 
 | Module | Responsibility | Key types |
 |---|---|---|
-| `App` | App lifecycle, menus, windows, settings | `PDFWorkbenchApp`, `AppCoordinator` |
+| `App` | App lifecycle, menus, windows, settings | `MacPDFApp`, `AppCoordinator` |
 | `Document` | Document state, save, undo, recovery | `PDFDocumentController`, `DocumentSession` |
 | `PDFCanvas` | Render, selection, tool interaction | `PDFCanvasView`, `ToolController` |
 | `Sidebar` | Thumbnails, outline, search, comments | `ThumbnailStore`, `OutlineController` |
@@ -326,7 +326,7 @@ enum PageOperation {
 ### 10.2 Recovery store
 
 ```
-Application Support/PDFWorkbench/Recovery/<document-uuid>/
+Application Support/MacPDF/Recovery/<document-uuid>/
 ├── manifest.json
 ├── snapshot.pdf
 └── metadata.json
@@ -403,7 +403,7 @@ context.endPDFPage()
 
 - Key：`sha256(page content + language + dpi)`。
 - Value：observations JSON。
-- 位置：`Application Support/PDFWorkbench/OCRCache/`。
+- 位置：`Application Support/MacPDF/OCRCache/`。
 - 失效：頁面內容變更、語言變更。
 
 ### 11.4 Failure handling
@@ -720,7 +720,7 @@ enum DocumentError: LocalizedError {
 
 ### 20.2 Logging
 
-- 使用 `os.Logger`，subsystem `com.example.pdfworkbench`。
+- 使用 `os.Logger`，subsystem `com.example.macpdf`。
 - 分類：document、pdf、ocr、redaction、flows、ui。
 - 預設不記錄文件名稱/內容；只記 ID 與錯誤碼。
 - 日誌只在本機；不上傳。
@@ -737,7 +737,7 @@ enum DocumentError: LocalizedError {
 ## 21. Storage layout
 
 ```
-~/Library/Application Support/PDFWorkbench/
+~/Library/Application Support/MacPDF/
 ├── Recovery/<document-uuid>/
 │   ├── manifest.json
 │   ├── snapshot.pdf
@@ -834,14 +834,14 @@ resources:
 settings:
   base:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
-    PRODUCT_BUNDLE_IDENTIFIER: com.example.pdfworkbench
+    PRODUCT_BUNDLE_IDENTIFIER: com.example.macpdf
     SWIFT_VERSION: "6.0"
     CODE_SIGN_STYLE: Automatic
 ```
 
 - `xcodegen generate` 產生 `.xcodeproj`。
 - `.xcodeproj` 不進版控（或進版控但標記 generated）。
-- Schemes：`PDFWorkbench`, `PDFWorkbenchTests`, `PDFWorkbenchUITests`.
+- Schemes：`MacPDF`, `MacPDFTests`, `MacPDFUITests`.
 
 ### 24.2 Signing
 
@@ -865,8 +865,8 @@ settings:
 
 ## 25. Testing hooks
 
-- `PDFWorkbenchTests`：operations、redaction、OCR mock、compare。
-- `PDFWorkbenchUITests`：開檔、註解、合併、塗黑流程。
+- `MacPDFTests`：operations、redaction、OCR mock、compare。
+- `MacPDFUITests`：開檔、註解、合併、塗黑流程。
 - `Fixtures/`：見 [06-test-plan.md](06-test-plan.md)。
 - 效能測試用 `XCTMetric` + 固定 fixture。
 - 若需要，加入 `--ui-testing` 參數停用動畫/對話框。
@@ -889,7 +889,7 @@ settings:
 ## 27. Proposed repository structure
 
 ```
-PDFWorkbench/
+MacPDF/
 ├── README.md
 ├── docs/
 │   ├── 01-product-brief.md

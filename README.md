@@ -1,8 +1,9 @@
-# PDF Workbench
+# MacPDF
 
 > A native, local-first PDF workbench for macOS.  
 > Planning repository — no application code yet.
 
+**Repository:** MacPDF  
 **Status:** Planning / specification  
 **Target:** macOS 14+ · Apple Silicon + Intel · Swift 6 + SwiftUI + PDFKit + Vision  
 **Scope:** A RevPDF-class daily PDF workflow, built for personal/internal use first.
@@ -11,7 +12,7 @@
 
 ## What this is
 
-PDF Workbench is a planned macOS application for editing, organizing, protecting, OCR-ing, comparing, and batch-processing PDF files **without uploading them anywhere**.
+MacPDF is a planned macOS application for editing, organizing, protecting, OCR-ing, comparing, and batch-processing PDF files **without uploading them anywhere**.
 
 The product is intentionally:
 

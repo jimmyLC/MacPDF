@@ -1,0 +1,43 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Generated project (xcodegen)
+*.xcodeproj
+!*.xcodeproj/project.pbxproj
+
+# Test artifacts
+TestResults/
+*.xcresult
+Fixtures/large/
+Fixtures/private/
+
+# Local tooling
+.env
+.env.*
+.vscode/
+.idea/
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.log

@@ -55,6 +55,7 @@ struct ReaderView: View {
             case .metadata: MetadataSheet(model: model) { model.sheet = nil }
             case .encrypt: EncryptSheet(model: model) { model.sheet = nil }
             case .compress: CompressSheet(model: model) { model.sheet = nil }
+            case .signature: SignatureSheet(model: model) { model.sheet = nil }
             }
         }
         .task(id: model.notice) {
@@ -186,6 +187,9 @@ struct ReaderView: View {
         let busy = model.job != nil || model.redaction != nil
         return Menu {
             Menu("頁面", systemImage: "doc.on.doc") {
+                Button("在這一頁前面插入空白頁") { model.insertBlankPage(after: false) }
+                Button("在這一頁後面插入空白頁") { model.insertBlankPage(after: true) }
+                Divider()
                 Button("順時針旋轉這一頁") { model.rotateCurrentPage() }
                 Button("向前移動這一頁") { model.moveCurrentPage(by: -1) }.disabled(model.currentPage <= 1)
                 Button("向後移動這一頁") { model.moveCurrentPage(by: 1) }.disabled(model.currentPage >= model.pageCount)
@@ -194,7 +198,9 @@ struct ReaderView: View {
             Menu("插入與擷取", systemImage: "plus.rectangle.on.rectangle") {
                 Button("合併 PDF 到最後…") { present(.merge) }
                 Button("從圖片新增頁面…") { present(.images) }
-                Button("擷取頁面／分割…") { extractPages() }
+                Button("擷取頁面…") { extractPages() }
+                Button("分割成每頁一個檔案…") { model.splitPages(rangesText: nil) }
+                Button("依範圍分割…") { splitByRanges() }
             }.disabled(busy)
             Menu("掃描頁面", systemImage: "text.viewfinder") {
                 Button("文字辨識（OCR）") { model.runOCR() }
@@ -245,7 +251,8 @@ struct ReaderView: View {
                     GlassIconButton(symbol: "plus.magnifyingglass", label: "放大", shortcut: KeyboardShortcut("=")) { model.pdfView.zoomIn(nil) }
                 }
                 GlassCapsule {
-                    GlassIconButton(symbol: "highlighter", label: "標示選取文字") { model.highlightSelection() }
+                    markupMenu
+                    GlassIconButton(symbol: "signature", label: "簽名…") { model.sheet = .signature }
                     GlassIconButton(symbol: "note.text", label: "新增便條…") { annotationFreeText = false; showingAnnotation = true }
                     GlassIconButton(symbol: "character.textbox", label: "新增文字方塊…") { annotationFreeText = true; showingAnnotation = true }
                     GlassIconButton(symbol: "pencil.tip", label: inkMode ? "結束手繪" : "手繪", active: inkMode) {
@@ -256,10 +263,25 @@ struct ReaderView: View {
         }
     }
 
+    private var markupMenu: some View {
+        Menu {
+            ForEach(MarkupColor.allCases) { swatch in
+                Button { model.markSelection(style: .highlight, color: swatch.color) } label: { Label("螢光筆（\(swatch.name)）", systemImage: "highlighter") }
+            }
+            Divider()
+            Button { model.markSelection(style: .underline, color: .systemRed) } label: { Label("底線", systemImage: "underline") }
+            Button { model.markSelection(style: .strikeOut, color: .systemRed) } label: { Label("刪除線", systemImage: "strikethrough") }
+        } label: {
+            Image(systemName: "highlighter").font(.system(size: 15, weight: .medium)).frame(width: 34, height: 34).contentShape(Circle())
+        } primaryAction: { model.highlightSelection() }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .help("標示選取文字（長按選擇螢光筆顏色、底線、刪除線）").accessibilityLabel("標示選取文字")
+    }
+
     private var placementBanner: some View {
         HStack(spacing: 12) {
             Image(systemName: "hand.point.up.left.fill").foregroundStyle(Color.accentColor)
-            Text("點一下頁面放置註解").font(.system(size: 13, weight: .medium))
+            Text(model.isPlacingSignature ? "點一下頁面放置簽名" : "點一下頁面放置註解").font(.system(size: 13, weight: .medium))
             Button("取消") { model.cancelAnnotationPlacement() }.controlSize(.small)
         }
         .padding(.horizontal, 16).padding(.vertical, 9)
@@ -306,6 +328,17 @@ struct ReaderView: View {
         }
         let panel = NSSavePanel(); panel.allowedContentTypes = [.pdf]; panel.nameFieldStringValue = "MacPDF-擷取.pdf"
         if panel.runModal() == .OK, let url = panel.url { model.extractPages(first...last, to: url) }
+    }
+    private func splitByRanges() {
+        let alert = NSAlert()
+        alert.messageText = L("依範圍分割")
+        alert.informativeText = L("輸入頁碼範圍，用逗號分隔，例如 1-3, 5, 8-10。每個範圍會存成一個新檔案。")
+        let field = NSTextField(string: "1-\(model.pageCount)")
+        field.frame = NSRect(x: 0, y: 0, width: 240, height: 24)
+        alert.accessoryView = field
+        alert.addButton(withTitle: L("選擇資料夾…")); alert.addButton(withTitle: L("取消"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        model.splitPages(rangesText: field.stringValue)
     }
     private func saveCopy() { model.saveCopyWithPanel() }
     private func openDocument(_ url: URL) {
@@ -460,4 +493,11 @@ struct OutlineRow: View {
         } else { Button(outline.label ?? L("未命名")) { navigate() }.buttonStyle(.plain) }
     }
     private func navigate() { if let destination = outline.destination { pdfView.go(to: destination) } }
+}
+
+enum MarkupColor: String, CaseIterable, Identifiable {
+    case yellow, green, pink, blue
+    var id: String { rawValue }
+    var name: String { switch self { case .yellow: L("黃"); case .green: L("綠"); case .pink: L("粉紅"); case .blue: L("藍") } }
+    var color: NSColor { switch self { case .yellow: .yellow; case .green: .systemGreen; case .pink: .systemPink; case .blue: .systemTeal } }
 }

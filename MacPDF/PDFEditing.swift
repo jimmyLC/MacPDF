@@ -148,12 +148,16 @@ final class PDFEditing {
         }
     }
     func highlight(page index: Int, bounds: [CGRect]) throws {
+        try markup(page: index, bounds: bounds, style: .highlight, color: .yellow)
+    }
+    /// Highlight, underline or strike-through over text lines. Highlights are translucent; lines are solid.
+    func markup(page index: Int, bounds: [CGRect], style: PDFAnnotationSubtype, color: NSColor) throws {
         guard !bounds.isEmpty else { throw EditError.noSelection }
         try mutate { doc in
             guard let page = doc.page(at: index) else { throw EditError.invalidPage }
             for rect in bounds where !rect.isEmpty {
-                let annotation = PDFAnnotation(bounds: rect, forType: .highlight, withProperties: nil)
-                annotation.color = NSColor.yellow.withAlphaComponent(0.5)
+                let annotation = PDFAnnotation(bounds: rect, forType: style, withProperties: nil)
+                annotation.color = style == .highlight ? color.withAlphaComponent(0.5) : color
                 annotation.quadrilateralPoints = [NSValue(point: NSPoint(x: 0, y: rect.height)), NSValue(point: NSPoint(x: rect.width, y: rect.height)), NSValue(point: .zero), NSValue(point: NSPoint(x: rect.width, y: 0))]
                 page.addAnnotation(annotation)
             }

@@ -1,7 +1,8 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum M2Sheet: String, Identifiable {
-    case metadata, encrypt, compress
+    case metadata, encrypt, compress, signature
     var id: String { rawValue }
 }
 
@@ -117,6 +118,136 @@ struct CompressSheet: View {
         case .high: "約 200 dpi，適合需要細看的文件。"
         case .standard: "約 150 dpi，大多數情況的平衡選擇。"
         case .small: "約 100 dpi，檔案最小，細節會變粗。"
+        }
+    }
+}
+
+struct SignatureSheet: View {
+    let model: ReaderModel
+    let close: () -> Void
+    enum Mode: String, CaseIterable, Identifiable { case saved, draw, typed, image; var id: String { rawValue } }
+    @State private var mode = Mode.draw
+    @State private var strokes: [[CGPoint]] = []
+    @State private var current: [CGPoint] = []
+    @State private var text = ""
+    @State private var fontName = Signature.typedFonts[0]
+    @State private var picture: CGImage?
+    @State private var keep = true
+    @State private var items: [SignatureStore.Item] = []
+    @State private var showingPicker = false
+
+    private var candidate: CGImage? {
+        switch mode {
+        case .saved: nil
+        case .draw: Signature.drawn(strokes: strokes + (current.count > 1 ? [current] : []))
+        case .typed: Signature.typed(text, fontName: fontName)
+        case .image: picture
+        }
+    }
+
+    var body: some View {
+        SheetFrame(title: "簽名", symbol: "signature") {
+            Picker("方式", selection: $mode) {
+                if !items.isEmpty { Text("已儲存").tag(Mode.saved) }
+                Text("手繪").tag(Mode.draw)
+                Text("打字").tag(Mode.typed)
+                Text("圖片").tag(Mode.image)
+            }.pickerStyle(.segmented).labelsHidden()
+            Group {
+                switch mode {
+                case .saved: savedGrid
+                case .draw: drawPad
+                case .typed: typedPad
+                case .image: imagePad
+                }
+            }.frame(height: 170)
+            if mode != .saved { Toggle("儲存為常用簽名", isOn: $keep) }
+            Text("簽名會放在頁面上你點的位置，可以復原。簽名只存在這台 Mac 上。").font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+                if mode != .saved {
+                    Button("使用") { use(candidate) }
+                        .keyboardShortcut(.defaultAction).prominentGlassButton().disabled(candidate == nil)
+                }
+            }
+        }
+        .onAppear { items = model.signatures.items(); if !items.isEmpty { mode = .saved } }
+        .fileImporter(isPresented: $showingPicker, allowedContentTypes: [.image]) { result in
+            if case .success(let url) = result {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                picture = Signature.fromImage(at: url)
+                if picture == nil { model.error = L("無法讀取這張圖片，或圖片中找不到簽名。") }
+            }
+        }
+    }
+
+    private func use(_ image: CGImage?) {
+        guard let image else { return }
+        if mode != .saved, keep { _ = try? model.signatures.save(image) }
+        close()
+        model.prepareSignature(image)
+    }
+
+    private var drawPad: some View {
+        ZStack(alignment: .topTrailing) {
+            Canvas { context, _ in
+                for stroke in strokes + [current] where stroke.count > 1 {
+                    var path = Path(); path.move(to: stroke[0]); stroke.dropFirst().forEach { path.addLine(to: $0) }
+                    context.stroke(path, with: .color(.primary), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                }
+            }
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.06)))
+            .overlay(alignment: .bottom) { Text("在這裡用觸控板或滑鼠簽名").font(.caption).foregroundStyle(.tertiary).padding(.bottom, 6).opacity(strokes.isEmpty && current.isEmpty ? 1 : 0) }
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { current.append($0.location) }
+                .onEnded { _ in if current.count > 1 { strokes.append(current) }; current = [] })
+            Button("清除") { strokes = []; current = [] }.controlSize(.small).padding(8).disabled(strokes.isEmpty)
+        }
+    }
+
+    private var typedPad: some View {
+        VStack(spacing: 10) {
+            TextField("輸入姓名", text: $text).textFieldStyle(.roundedBorder)
+            Picker("字型", selection: $fontName) {
+                ForEach(Signature.typedFonts, id: \.self) { Text($0).tag($0) }
+            }
+            ZStack {
+                RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.06))
+                if let image = candidate { Image(decorative: image, scale: 2).resizable().scaledToFit().padding(10) }
+            }
+        }
+    }
+
+    private var imagePad: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.06))
+                if let image = picture { Image(decorative: image, scale: 2).resizable().scaledToFit().padding(10) }
+                else { Text("選一張在白紙上簽名的照片或掃描圖，白色背景會自動去掉。").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding() }
+            }
+            Button("選擇圖片…") { showingPicker = true }
+        }
+    }
+
+    private var savedGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 10) {
+                ForEach(items) { item in
+                    ZStack(alignment: .topTrailing) {
+                        Button { if let image = model.signatures.image(item) { close(); model.prepareSignature(image) } } label: {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.06))
+                                if let image = model.signatures.image(item) { Image(decorative: image, scale: 2).resizable().scaledToFit().padding(8) }
+                            }.frame(height: 70)
+                        }.buttonStyle(.plain)
+                        Button { model.signatures.delete(item); items = model.signatures.items(); if items.isEmpty { mode = .draw } } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }.buttonStyle(.plain).padding(4).accessibilityLabel("刪除這個簽名")
+                    }
+                }
+            }
         }
     }
 }

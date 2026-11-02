@@ -58,6 +58,14 @@ File > Batch process… takes many PDFs (picker or drag), a set of steps (OCR, f
 - Not built: saved reusable flows, step reordering, split/merge/rotate/watermark/redact/find-replace steps, a 500-file limit check, running without the window open.
 - Tested by `Tests/BatchTests.swift` (5 tests: OCR, OCR+compress, refusal of encrypted input, non-colliding names, start rules). The window layout was checked by hand; a full run through the file panels was not driven by hand.
 
+## M5 page management, markup and signature
+
+- Pages: insert a blank page before or after the current one (same on-screen size as it); split into one file per page; split by ranges such as `1-3, 5, 8-10` (full-width digits and commas accepted). Splits write new files named `name-001-003.pdf` into a chosen folder; an existing name gets a number instead of being replaced.
+- Markup: the highlighter button's menu now offers four highlight colours, underline and strikethrough (real PDF annotations; undoable).
+- Signature: draw, type (four script fonts) or import a picture (paper background removed). Saved signatures live in `Application Support/MacPDF/Signatures` on this Mac only. Placing one rebuilds the page with the picture drawn over it while the page's own text stays real text; links that pointed inside the document are dropped from that page, like OCR and compression. Rotated pages are refused.
+- Not done: drag-to-reorder and multi-select of thumbnails, sizing a signature after placing it (fixed 160 pt wide; undo and place again), a digital (certificate) signature, a signature field filled by the signature tool.
+- Hand-checked: toolbar button and the signature sheet render. Drawing in the sheet and placing it through the desktop driver was not possible (the sheet is a second window the driver could not target), so placement is covered by the unit test that checks the pixels and text.
+
 ## Verification and outstanding work
 
 - Signed, sandbox-enabled Apple Silicon debug build and automated tests pass on the development Mac.

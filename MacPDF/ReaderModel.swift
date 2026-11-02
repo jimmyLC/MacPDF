@@ -19,6 +19,9 @@ final class ReaderModel: NSObject {
     private(set) var results: [PDFSelection] = []
     var error: String?
     private var pendingAnnotation: (String, Bool)?
+    private var pendingSignature: CGImage?
+    var isPlacingSignature: Bool { pendingSignature != nil }
+    let signatures = SignatureStore()
     private(set) var isPlacingAnnotation = false
     private(set) var isSearching = false
     private(set) var hasSearched = false
@@ -183,18 +186,45 @@ final class ReaderModel: NSObject {
     func undoEdit() { editWithoutHistory { try $0.undo() } }
     func redoEdit() { editWithoutHistory { try $0.redo() } }
     private func editWithoutHistory(_ operation: (PDFEditing) throws -> Void) { edit(operation) }
+    func insertBlankPage(after: Bool) {
+        let at = currentPage - 1
+        edit { try $0.insertBlankPage(relativeTo: at, after: after) }
+        if error == nil { goToPage(after ? at + 2 : at + 1); notice = L("已插入空白頁。") }
+    }
+
+    /// Splits into one file per range in a folder the user picks. `rangesText` nil means one file per page.
+    func splitPages(rangesText: String?) {
+        guard let editor, redaction == nil else { return }
+        let ranges: [ClosedRange<Int>]
+        do {
+            ranges = try rangesText.map { try PDFEditing.parseRanges($0, pageCount: pageCount) } ?? (1...pageCount).map { $0...$0 }
+        } catch { self.error = L("請輸入有效的頁碼範圍，例如 1-3, 5, 8-10。"); return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.message = L("選擇存放分割檔案的資料夾。每個檔案都是新檔，不會覆寫現有檔案。")
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        let scoped = folder.startAccessingSecurityScopedResource()
+        defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+        let base = (sourceURL?.deletingPathExtension().lastPathComponent ?? title.replacingOccurrences(of: ".pdf", with: ""))
+        do {
+            let files = try editor.split(ranges: ranges, into: folder, baseName: base)
+            notice = String(format: L("已分割成 %ld 個檔案。"), files.count)
+        } catch { self.error = error.localizedDescription }
+    }
+
     func appendPDF(_ url: URL) {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let other = PDFDocument(url: url), other.pageCount > 0 else { error = L("無法讀取要合併的 PDF。"); return }
         edit { try $0.append(other) }
     }
-    func highlightSelection() {
+    func highlightSelection() { markSelection(style: .highlight, color: .yellow) }
+    func markSelection(style: PDFAnnotationSubtype, color: NSColor) {
         guard let selection = pdfView.currentSelection, let document else { error = PDFEditing.EditError.noSelection.localizedDescription; return }
         let selections = selection.selectionsByLine()
         let groups = Dictionary(grouping: selections.flatMap { line in line.pages.map { ($0, line.bounds(for: $0)) } }, by: { document.index(for: $0.0) })
         guard groups.count == 1, let (index, lines) = groups.first else { error = L("請選取同一頁內的文字。"); return }
-        edit { try $0.highlight(page: index, bounds: lines.map(\.1)) }
+        edit { try $0.markup(page: index, bounds: lines.map(\.1), style: style, color: color) }
     }
     func setInkMode(_ enabled: Bool) { pdfView.inkMode = enabled }
     private func addInk(page: Int, points: [CGPoint]) { edit { try $0.ink(page: page, points: points) } }
@@ -204,9 +234,31 @@ final class ReaderModel: NSObject {
         isPlacingAnnotation = true; pdfView.placingAnnotation = true
     }
     func cancelAnnotationPlacement() {
-        pendingAnnotation = nil; isPlacingAnnotation = false; pdfView.placingAnnotation = false
+        pendingAnnotation = nil; pendingSignature = nil; isPlacingAnnotation = false; pdfView.placingAnnotation = false
     }
+    func prepareSignature(_ image: CGImage) {
+        setInkMode(false); setRedactDrawing(false)
+        pendingAnnotation = nil; pendingSignature = image
+        isPlacingAnnotation = true; pdfView.placingAnnotation = true
+    }
+
+    private func placeSignature(_ image: CGImage, page index: Int, at point: CGPoint) {
+        cancelAnnotationPlacement()
+        guard let page = document?.page(at: index) else { return }
+        guard page.rotation == 0 else { error = L("旋轉過的頁面無法簽名，請先把頁面轉回原本的方向。"); return }
+        let width: CGFloat = 160
+        let size = CGSize(width: width, height: width * CGFloat(image.height) / CGFloat(image.width))
+        var rect = CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height)
+        let box = page.bounds(for: .cropBox)
+        rect.origin.x = min(max(rect.minX, box.minX), box.maxX - rect.width)
+        rect.origin.y = min(max(rect.minY, box.minY), box.maxY - rect.height)
+        guard let stamped = PDFProcessing.stampedPage(from: page, image: image, rect: rect) else { error = L("無法放置簽名。"); return }
+        edit { try $0.replace(pages: [index: stamped]) }
+        if error == nil { notice = L("已放置簽名，可以復原。") }
+    }
+
     private func placeAnnotation(page: Int, point: CGPoint) {
+        if let image = pendingSignature { placeSignature(image, page: page, at: point); return }
         guard let (text, freeText) = pendingAnnotation else { return }
         cancelAnnotationPlacement()
         let bounds = CGRect(x: point.x, y: point.y, width: freeText ? 160 : 24, height: freeText ? 40 : 24)

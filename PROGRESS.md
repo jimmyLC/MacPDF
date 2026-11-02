@@ -19,6 +19,8 @@ Updated: 2026-11-02 (Asia/Singapore). M1 is an internal candidate; acceptance is
 
 - M4 compare two PDFs (text diff, side by side) is on branch `m4-compare`; see `docs/11-implementation-plan.md`. A basic batch window (OCR, flatten, compress over many files) is there too.
 
+- M5: blank page, split (each page / ranges), underline, strikethrough, highlight colours and signature are on branch `m5-pages-markup`.
+
 ## Verification
 
 - `python3 scripts/accept-m1.py`: 16 passed, 0 failed, 1 skipped on Apple Silicon/macOS 27; the skipped test requires a mounted isolated external test volume. Full local evidence is in ignored `build/acceptance/`.

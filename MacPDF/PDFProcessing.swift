@@ -74,6 +74,26 @@ enum PDFProcessing {
         return finish(data as Data, carrying: page, cropOrigin: box.origin)
     }
 
+    /// Redraws the page with a picture laid over it at `rect` (page space). The page's own content stays vector,
+    /// so its text remains selectable. Rotated pages are not supported.
+    @MainActor static func stampedPage(from page: PDFPage, image: CGImage, rect: CGRect) -> PDFPage? {
+        let box = page.bounds(for: .cropBox)
+        guard page.rotation == 0, box.width > 0, box.height > 0 else { return nil }
+        var mediaBox = CGRect(origin: .zero, size: box.size)
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data),
+              let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
+        context.beginPDFPage(nil)
+        let previous = page.displaysAnnotations
+        page.displaysAnnotations = false
+        page.draw(with: .cropBox, to: context)
+        page.displaysAnnotations = previous
+        context.draw(image, in: rect.offsetBy(dx: -box.minX, dy: -box.minY))
+        context.endPDFPage()
+        context.closePDF()
+        return finish(data as Data, carrying: page, cropOrigin: box.origin)
+    }
+
     private static func drawInvisibleText(_ lines: [TextLine], in context: CGContext, size: CGSize) {
         context.setTextDrawingMode(.invisible)
         for line in lines {

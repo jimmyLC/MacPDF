@@ -1,0 +1,47 @@
+name: MacPDF
+options:
+  developmentLanguage: zh-Hant
+  deploymentTarget:
+    macOS: '14.0'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+targets:
+  MacPDF:
+    type: application
+    platform: macOS
+    sources: [MacPDF]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jimmylc.MacPDF
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: MacPDF
+        CODE_SIGN_ENTITLEMENTS: MacPDF/MacPDF.entitlements
+        ENABLE_APP_SANDBOX: YES
+    info:
+      path: MacPDF/Info.plist
+      properties:
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: PDF Document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.adobe.pdf]
+        NSPrincipalClass: NSApplication
+  MacPDFTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [Tests]
+    dependencies:
+      - target: MacPDF
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.jimmylc.MacPDFTests
+schemes:
+  MacPDF:
+    build:
+      targets:
+        MacPDF: all
+        MacPDFTests: [test]
+    test:
+      targets: [MacPDFTests]

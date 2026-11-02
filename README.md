@@ -1,10 +1,10 @@
 # MacPDF
 
 > A native, local-first PDF workbench for macOS.  
-> Planning repository — no application code yet.
+> Early development — M1 features implemented; validation in progress.
 
 **Repository:** MacPDF  
-**Status:** Planning / specification  
+**Status:** Internal development / M1 validation
 **Target:** macOS 14+ · Apple Silicon + Intel · Swift 6 + SwiftUI + PDFKit + Vision  
 **Scope:** A RevPDF-class daily PDF workflow, built for personal/internal use first.
 
@@ -12,7 +12,7 @@
 
 ## What this is
 
-MacPDF is a planned macOS application for editing, organizing, protecting, OCR-ing, comparing, and batch-processing PDF files **without uploading them anywhere**.
+MacPDF is a macOS application under development for editing, organizing, protecting, OCR-ing, comparing, and batch-processing PDF files **without uploading them anywhere**.
 
 The product is intentionally:
 
@@ -65,13 +65,13 @@ The full, itemized scope is in [docs/02-prd.md](docs/02-prd.md) — **271 featur
 
 | Phase | What ships | Status |
 |---|---|---|
-| **M0** | App shell, open/view, thumbnails, outline, search, tabs | Planned |
-| **M1** | Page operations, merge/split, annotations, signature, watermark, export, print, undo/recovery | Planned |
+| **M0** | Open/view, thumbnails, outline, search, multiple windows | Implemented; validation ongoing |
+| **M1** | Page operations, merge/extract, basic annotations, export, print, undo/recovery | Implemented; validation ongoing |
 | **M2** | OCR, forms fill/flatten, password/permissions, compress, metadata, Quick Actions | Planned |
 | **M3** | Form builder, redaction, compare, Flows, PDF/A-1b/2b/3b | Planned |
 | **M4** | True text editing, PDF → Word/Excel, digital signatures | Optional / not committed |
 
-For internal use, **M2 is the first usable release** and **M3 is the first complete release**. M4 is deliberately gated because true text editing and Office conversion are multi-month engineering problems.
+M1 is the first internal trial target. M4 is deliberately gated because true text editing and Office conversion are multi-month engineering problems. See [implementation status](docs/11-implementation-plan.md) for exact scope and limitations.
 
 ---
 
@@ -80,7 +80,7 @@ For internal use, **M2 is the first usable release** and **M3 is the first compl
 | Layer | Choice |
 |---|---|
 | UI | SwiftUI + AppKit bridges |
-| Document model | `NSDocument` |
+| Document model | In-memory PDFKit model with snapshots |
 | PDF rendering | PDFKit `PDFView` |
 | PDF operations | PDFKit + CoreGraphics |
 | OCR | Vision `VNRecognizeTextRequest` |
@@ -95,14 +95,13 @@ No third-party runtime dependencies are planned for v1. PDFium may be evaluated 
 
 ## Repository status
 
-This repository currently contains **planning documents only**:
+This repository contains planning documents and an **early M1 app**:
 
-- No Xcode project
-- No build instructions
-- No releases
-- No application code
+- Generate the Xcode project with `xcodegen generate`.
+- Build and test instructions and current limitations: [Implementation plan](docs/11-implementation-plan.md).
+- No public releases; this is an internal development build.
 
-The next step after plan approval is an M0 skeleton: Xcode project, document window, PDFKit view, thumbnails, search, and recent files.
+See the implementation plan for current validation, safety behavior and limitations.
 
 ---
 

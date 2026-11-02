@@ -17,12 +17,26 @@ The app never overwrites an existing destination: it writes and flushes a tempor
 
 Editing, extraction and re-export are deliberately disabled for encrypted PDFs and PDFs containing digital signature fields. Decrypting, preserving encryption, and certificate signatures are not implemented. Undo retains up to 20 snapshots and 200 MiB; a document too large for a snapshot cannot be edited. Edits use PDFKit serialization, and fidelity for complex forms, annotations, attachments, signatures and unusual PDFs is not established. Use copies and inspect output before relying on it.
 
+## M2 implementation and limitations
+
+Implemented (all undoable, all produce a new file only when saved):
+
+- **OCR** (Document menu / More > Scanned pages): Apple Vision, Traditional Chinese + English, runs per page with a cancellable progress banner. Each recognised page is redrawn and given an invisible text layer positioned per text line, so it is searchable and selectable. Pages that already have text in the file and rotated pages are skipped. Rebuilt pages use the crop box as their page size; non-link annotations are copied, internal link targets on rebuilt pages are dropped, and bookmarks/links that pointed at replaced pages are re-pointed.
+- **Compression**: only full-page scans (a page whose largest image is at least half the page area) are re-encoded as JPEG at 200/150/100 dpi, keeping the existing text layer. If the result is not smaller the change is undone automatically. Vector and born-digital pages are never rasterised.
+- **Forms**: PDFKit shows and edits fields in place; edits are tracked so quit/close/recovery know the document changed. "Clear form fields" resets values; "Flatten form" burns fields into the page and leaves other annotations editable. XFA and JavaScript-driven forms are not supported.
+- **Document info**: title, author, subject, keywords; "Clear all" removes them. PDFKit still writes its own Producer/Creator, and XMP metadata, attachments and embedded JavaScript are not cleaned.
+- **Images to pages**: any image format ImageIO reads, fitted to A4 (portrait or landscape) as JPEG.
+- **Protection**: "Save encrypted copy" (open password, optional owner password, print/copy/edit permissions) and, for an encrypted document the user has unlocked, "Save copy without password". Both write a new file; encrypted documents still cannot be edited in place. Encryption strength is whatever PDFKit/CoreGraphics produces and has not been audited.
+- **Finder**: an "Open with MacPDF" Service for selected PDFs (declared in `project.yml`, handled in `AppDelegate`). Not yet verified from Finder.
+
+Not implemented: PDF/A, extracting embedded images, image crop/contrast editing, scanner import, Dock menu, window-position memory. OCR accuracy on real scans (skew, noise, handwriting, mixed languages) is unmeasured; the automated tests use clean generated text.
+
 ## Verification and outstanding work
 
 - Signed, sandbox-enabled Apple Silicon debug build and automated tests pass on the development Mac.
 - Manual smoke checks: opening a PDF, searching, rotating, saving a new copy, unsaved close/quit prompts, a second document window, opening the print preview, and restoring an unsaved rotation after force-quitting the isolated sandboxed test app. A Poppler `pdfinfo` check read the saved file and reported the expected page rotation; the source remained unchanged.
-- Intel compilation succeeded; Intel runtime and macOS 14 have not been tested. Earlier Finder/Launch Services tests exposed competing SwiftUI/AppDelegate window creation. Document windows are now owned exclusively by PDFWindows; real-window integration tests cover cold batch, duplicate opens, and close-all/reopen. The updated shell visual smoke and drag gesture remain pending because desktop automation failed. See 12-m1-acceptance.md for the fixed gates and evidence. Large-file performance, full accessibility, cross-reader fidelity and all English translations need further validation. Automated tests also cover a synthetic PDF with crop box, annotations, a URL link, and a bookmark before and after reordering, and check local link/bookmark targets during merge and extraction. Links whose targets are outside an extracted range are disabled.
-- This is an internal development build, not a public release or a claim that all historical PRD features are implemented. There are no OCR, forms, redaction or Office conversion features yet.
+- macOS 14 has not been tested. Earlier Finder/Launch Services tests exposed competing SwiftUI/AppDelegate window creation. Document windows are now owned exclusively by PDFWindows; real-window integration tests cover cold batch, duplicate opens, and close-all/reopen. The updated shell visual smoke and drag gesture remain pending because desktop automation failed. See 12-m1-acceptance.md for the fixed gates and evidence. Large-file performance, full accessibility, cross-reader fidelity and all English translations need further validation. Automated tests also cover a synthetic PDF with crop box, annotations, a URL link, and a bookmark before and after reordering, and check local link/bookmark targets during merge and extraction. Links whose targets are outside an extracted range are disabled.
+- This is an internal development build, not a public release or a claim that all historical PRD features are implemented. There is no redaction, comparison, batch flow or Office conversion yet; see the M2 section for what exists.
 
 ## Build
 

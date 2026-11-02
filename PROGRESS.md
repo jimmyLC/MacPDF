@@ -10,7 +10,8 @@ Updated: 2026-11-02 (Asia/Singapore). M1 is an internal candidate; acceptance is
 - `PDFWindows` is the sole document-window owner, replacing conflicting SwiftUI and AppDelegate routing. Merge/extraction remap local destinations and bookmarks; links to pages outside an extracted range are disabled.
 - Cross-volume save uses an item-replacement directory where needed. Sandbox Save-panel export to an isolated APFS volume was manually tested on an earlier build.
 
-- UI redesign (branch `redesign/liquid-glass`, uncommitted): floating Liquid Glass top bar, bottom tool dock and sidebar over an ambient background; new welcome screen and drop overlay. macOS 26+ uses the system glass; macOS 14–25 falls back to materials. Only checked visually on macOS 27 dark mode; light mode and macOS 14–25 fallback are unverified.
+- M2 core features on branch `m2-features` (not merged): OCR, scan compression, form clear/flatten, document info, images to pages, encrypted/unlocked copies, Document menu, Finder Service. See `docs/11-implementation-plan.md`.
+- UI redesign (merged to main): floating Liquid Glass top bar, bottom tool dock and sidebar over an ambient background; new welcome screen and drop overlay. macOS 26+ uses the system glass; macOS 14–25 falls back to materials. Only checked visually on macOS 27 dark mode; light mode and macOS 14–25 fallback are unverified.
 
 ## Verification
 

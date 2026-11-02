@@ -35,5 +35,23 @@
 	<string>1</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Open with MacPDF</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>openPDFs</string>
+			<key>NSPortName</key>
+			<string>MacPDF</string>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

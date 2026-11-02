@@ -67,7 +67,7 @@ The full, itemized scope is in [docs/02-prd.md](docs/02-prd.md) — **271 featur
 |---|---|---|
 | **M0** | Open/view, thumbnails, outline, search, multiple windows | Implemented; validation ongoing |
 | **M1** | Page operations, merge/extract, basic annotations, export, print, undo/recovery | Implemented; validation ongoing |
-| **M2** | OCR, forms fill/flatten, password/permissions, compress, metadata, Quick Actions | Planned |
+| **M2** | OCR, forms fill/flatten, password/permissions, compress, metadata, Quick Actions | Core features implemented; PDF/A, image extraction and image editing not started |
 | **M3** | Form builder, redaction, compare, Flows, PDF/A-1b/2b/3b | Planned |
 | **M4** | True text editing, PDF → Word/Excel, digital signatures | Optional / not committed |
 

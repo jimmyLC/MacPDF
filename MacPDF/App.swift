@@ -13,7 +13,14 @@ struct MacPDFApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.servicesProvider = self
+        NSUpdateDynamicServices()
         PDFWindows.shared.showWelcomeIfNeeded()
+    }
+    /// Finder > Quick Actions / Services: "Open with MacPDF" for selected PDFs.
+    @MainActor @objc func openPDFs(_ pasteboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        let urls = (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+        PDFWindows.shared.open(urls.filter { $0.pathExtension.lowercased() == "pdf" })
     }
     func application(_ sender: NSApplication, open urls: [URL]) {
         PDFWindows.shared.open(urls)

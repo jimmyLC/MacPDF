@@ -35,6 +35,12 @@ The window tests use an isolated PDFWindows instance and suppress presentation, 
 
 Earlier manual results are not presented as proof of the changed window shell. Current-shell smoke checks must be rerun once, after desktop automation is available. Do not repeatedly retest all PDF operations through Finder.
 
+## M2 gates
+
+Automated (`Tests/M2Tests.swift`, run by the same script): OCR output is searchable and located at the text's position and keeps page labels; Traditional Chinese is recognised; replaced pages keep bookmarks and links; compression shrinks a scan and keeps page size; compression keeps a recognised scan's text; a vector text page is not treated as a scan; flatten keeps values and other annotations and can be undone; form reset can be undone; metadata round trip; image import fits A4; encrypted copy requires the password and honours permissions; unlocked copy is not encrypted.
+
+Manual on 2026-11-02 (macOS 27, Apple Silicon, dark mode, desktop driver): Document-menu OCR on a 3-page generated scan applied a text layer to every page and enabled undo; the Document-info and Compress sheets display; Flatten form on a generated form kept the field values; the sidebar thumbnails keep correct page numbers. Not yet checked by hand: the encrypt sheet and Save panel flow, images-to-pages through the file picker, the Finder Service, OCR on real scans, cancelling a running job.
+
 ## Compatibility envelope
 
 Apple Silicon runtime tested on the development Mac. Intel is out of scope (Apple Silicon only). Compilation does not prove macOS 14 compatibility. Network/exFAT volumes, malformed PDFs and a representative large-document corpus have no general compatibility claim. Encrypted/signature-field document editing remains unsupported. These are explicit limitations, not passed acceptance items.

@@ -255,4 +255,73 @@ final class M7Tests: XCTestCase {
         XCTAssertEqual(model.pageCount, 1)
         _ = model.discardChanges()
     }
+
+    // MARK: Annotation styles and inspector
+
+    func testStyleRoundTripsAndHexColours() throws {
+        var style = AnnotationStyle(); style.inkWidth = 6; style.textFont = "Courier"; style.textAlignment = .center; style.author = "Jimmy"
+        let data = try JSONEncoder().encode(style)
+        XCTAssertEqual(try JSONDecoder().decode(AnnotationStyle.self, from: data), style)
+        let colour = try XCTUnwrap(NSColor(hex: "#336699"))
+        XCTAssertEqual(colour.hexString, "#336699")
+        XCTAssertNil(NSColor(hex: "nope"))
+    }
+
+    func testTextBoxUsesTheChosenFontAndNoteHasAnAuthor() throws {
+        let edit = PDFEditing(document: try textDocument([["page"]]))
+        var style = AnnotationStyle(); style.textFont = "Courier"; style.textSize = 22; style.textColor = "#FF0000"; style.textAlignment = .right; style.author = "Ann"
+        try edit.annotate(page: 0, bounds: CGRect(x: 50, y: 50, width: 160, height: 40), text: "hello", freeText: true, style: style)
+        try edit.annotate(page: 0, bounds: CGRect(x: 300, y: 50, width: 24, height: 24), text: "note", freeText: false, style: style)
+        for document in [edit.document, try XCTUnwrap(PDFDocument(data: try XCTUnwrap(edit.document.dataRepresentation())))] {
+            let annotations = try XCTUnwrap(document.page(at: 0)).annotations
+            let box = try XCTUnwrap(annotations.first { $0.type == "FreeText" })
+            XCTAssertEqual(box.contents, "hello")
+            XCTAssertEqual(box.font?.fontName, "Courier")
+            XCTAssertEqual(box.font?.pointSize ?? 0, 22, accuracy: 0.5, "size is kept, also after saving")
+            let colour = try XCTUnwrap(box.fontColor?.usingColorSpace(.sRGB))
+            XCTAssertEqual(colour.redComponent, 1, accuracy: 0.05); XCTAssertEqual(colour.greenComponent, 0.1, accuracy: 0.15); XCTAssertEqual(colour.blueComponent, 0, accuracy: 0.05)
+            XCTAssertEqual(box.alignment, .right)
+            XCTAssertEqual(try XCTUnwrap(annotations.first { $0.type == "Text" }).userName, "Ann")
+        }
+    }
+
+    func testInkColourAndWidthAndHighlightOpacity() throws {
+        let edit = PDFEditing(document: try textDocument([["page"]]))
+        try edit.ink(page: 0, points: [CGPoint(x: 10, y: 10), CGPoint(x: 100, y: 80)], color: .systemGreen, width: 7)
+        try edit.markup(page: 0, bounds: [CGRect(x: 72, y: 690, width: 100, height: 20)], style: .highlight, color: .yellow, opacity: 0.2, author: "Bo")
+        // The highlight's translucency is not stored in the file by PDFKit (it writes the colour only), so check
+        // the document being edited; the ink width does survive saving.
+        let annotations = try XCTUnwrap(edit.document.page(at: 0)).annotations
+        let highlight = try XCTUnwrap(annotations.first { $0.type == "Highlight" })
+        XCTAssertEqual(highlight.color.alphaComponent, 0.2, accuracy: 0.02)
+        XCTAssertEqual(highlight.userName, "Bo")
+        let reopened = try XCTUnwrap(PDFDocument(data: try XCTUnwrap(edit.document.dataRepresentation())))
+        let ink = try XCTUnwrap(try XCTUnwrap(reopened.page(at: 0)).annotations.first { $0.type == "Ink" })
+        XCTAssertEqual(ink.border?.lineWidth ?? 0, 7, accuracy: 0.01)
+    }
+
+    func testEditingAndDeletingAnExistingAnnotationIsUndoable() throws {
+        let edit = PDFEditing(document: try textDocument([["page"]]))
+        try edit.markup(page: 0, bounds: [CGRect(x: 72, y: 690, width: 100, height: 20)], style: .underline, color: .systemRed)
+        let page = try XCTUnwrap(edit.document.page(at: 0))
+        let slot = try XCTUnwrap(PDFEditing.editableAnnotations(on: page).first?.slot)
+        try edit.updateAnnotation(page: 0, slot: slot) { $0.color = .systemBlue; $0.userName = "Cy" }
+        let changed = try XCTUnwrap(edit.document.page(at: 0)?.annotations[slot])
+        XCTAssertEqual(changed.userName, "Cy")
+        XCTAssertEqual(changed.color.hexString, NSColor.systemBlue.hexString)
+        try edit.deleteAnnotation(page: 0, slot: slot)
+        XCTAssertTrue(PDFEditing.editableAnnotations(on: try XCTUnwrap(edit.document.page(at: 0))).isEmpty)
+        try edit.undo()
+        XCTAssertEqual(PDFEditing.editableAnnotations(on: try XCTUnwrap(edit.document.page(at: 0))).count, 1)
+        XCTAssertThrowsError(try edit.deleteAnnotation(page: 0, slot: 9))
+    }
+
+    func testLinksAndFormFieldsAreNotOfferedForEditing() throws {
+        let doc = try M2Tests().scanDocument(["a", "b"])
+        let page = try XCTUnwrap(doc.page(at: 0))
+        let link = PDFAnnotation(bounds: CGRect(x: 5, y: 5, width: 30, height: 20), forType: .link, withProperties: nil)
+        link.destination = PDFDestination(page: try XCTUnwrap(doc.page(at: 1)), at: .zero); page.addAnnotation(link)
+        let note = PDFAnnotation(bounds: CGRect(x: 60, y: 60, width: 20, height: 20), forType: .text, withProperties: nil); page.addAnnotation(note)
+        XCTAssertEqual(PDFEditing.editableAnnotations(on: page).map { $0.annotation.type ?? "" }, ["Text"])
+    }
 }

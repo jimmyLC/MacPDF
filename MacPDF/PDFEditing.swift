@@ -137,45 +137,21 @@ final class PDFEditing {
             if root.numberOfChildren > 0 { target.outlineRoot = root }
         }
     }
-    func annotate(page index: Int, bounds: CGRect, text: String, freeText: Bool) throws {
-        try mutate { doc in
-            guard let page = doc.page(at: index) else { throw EditError.invalidPage }
-            let annotation = PDFAnnotation(bounds: bounds, forType: freeText ? .freeText : .text, withProperties: nil)
-            annotation.contents = text
-            annotation.color = freeText ? .clear : .yellow
-            if freeText { annotation.font = NSFont.systemFont(ofSize: 14); annotation.fontColor = .black }
-            page.addAnnotation(annotation)
-        }
-    }
     func highlight(page index: Int, bounds: [CGRect]) throws {
         try markup(page: index, bounds: bounds, style: .highlight, color: .yellow)
     }
     /// Highlight, underline or strike-through over text lines. Highlights are translucent; lines are solid.
-    func markup(page index: Int, bounds: [CGRect], style: PDFAnnotationSubtype, color: NSColor) throws {
+    func markup(page index: Int, bounds: [CGRect], style: PDFAnnotationSubtype, color: NSColor, opacity: CGFloat = 0.5, author: String? = nil) throws {
         guard !bounds.isEmpty else { throw EditError.noSelection }
         try mutate { doc in
             guard let page = doc.page(at: index) else { throw EditError.invalidPage }
             for rect in bounds where !rect.isEmpty {
                 let annotation = PDFAnnotation(bounds: rect, forType: style, withProperties: nil)
-                annotation.color = style == .highlight ? color.withAlphaComponent(0.5) : color
+                annotation.color = style == .highlight ? color.withAlphaComponent(opacity) : color
+                if let author { annotation.userName = author }
                 annotation.quadrilateralPoints = [NSValue(point: NSPoint(x: 0, y: rect.height)), NSValue(point: NSPoint(x: rect.width, y: rect.height)), NSValue(point: .zero), NSValue(point: NSPoint(x: rect.width, y: 0))]
                 page.addAnnotation(annotation)
             }
-        }
-    }
-    func ink(page index: Int, points: [CGPoint]) throws {
-        guard points.count > 1 else { return }
-        try mutate { doc in
-            guard let page = doc.page(at: index) else { throw EditError.invalidPage }
-            let pageBounds = page.bounds(for: .cropBox)
-            let path = NSBezierPath()
-            path.move(to: NSPoint(x: points[0].x - pageBounds.minX, y: points[0].y - pageBounds.minY))
-            for point in points.dropFirst() { path.line(to: NSPoint(x: point.x - pageBounds.minX, y: point.y - pageBounds.minY)) }
-            let annotation = PDFAnnotation(bounds: pageBounds, forType: .ink, withProperties: nil)
-            annotation.color = .systemBlue
-            let border = PDFBorder(); border.lineWidth = 2; annotation.border = border
-            annotation.add(path)
-            page.addAnnotation(annotation)
         }
     }
     func undo() throws { try restore(from: &undoStack, to: &redoStack) }

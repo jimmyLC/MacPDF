@@ -29,6 +29,10 @@ final class ReaderModel: NSObject {
     private(set) var resultIndex: Int?
     private var searchTask: Task<Void, Never>?
     var viewMode = ViewMode.continuous
+    var style = AnnotationStyle.load() { didSet { style.save() } }
+    struct AnnotationRef: Equatable { let page: Int; let slot: Int }
+    private(set) var inspected: AnnotationRef?
+    private(set) var inspectMode = false
     private(set) var hasSearched = false
     private(set) var currentPage = 0
     /// Thumbnail selection, zero-based page indices.
@@ -59,6 +63,7 @@ final class ReaderModel: NSObject {
         pdfView = ReaderPDFView()
         super.init()
         pdfView.onRedactRect = { [weak self] page, rect in self?.addManualMark(page: page, rect: rect) }
+        pdfView.onInspect = { [weak self] ref in self?.inspected = ref.map { AnnotationRef(page: $0.0, slot: $0.1) } }
         pdfView.onInk = { [weak self] page, points in self?.addInk(page: page, points: points) }
         pdfView.onPlacement = { [weak self] page, point in self?.placeAnnotation(page: page, point: point) }
         pdfView.autoScales = true
@@ -344,15 +349,41 @@ final class ReaderModel: NSObject {
         edit { try $0.append(other) }
     }
     func highlightSelection() { markSelection(style: .highlight, color: .yellow) }
+    private var lineColor: NSColor { NSColor(hex: self.style.lineColor) ?? .systemRed }
     func markSelection(style: PDFAnnotationSubtype, color: NSColor) {
         guard let selection = pdfView.currentSelection, let document else { error = PDFEditing.EditError.noSelection.localizedDescription; return }
         let selections = selection.selectionsByLine()
         let groups = Dictionary(grouping: selections.flatMap { line in line.pages.map { ($0, line.bounds(for: $0)) } }, by: { document.index(for: $0.0) })
         guard groups.count == 1, let (index, lines) = groups.first else { error = L("請選取同一頁內的文字。"); return }
-        edit { try $0.markup(page: index, bounds: lines.map(\.1), style: style, color: color) }
+        let opacity = CGFloat(self.style.highlightOpacity), author = self.style.author
+        edit { try $0.markup(page: index, bounds: lines.map(\.1), style: style, color: color, opacity: opacity, author: author) }
     }
-    func setInkMode(_ enabled: Bool) { pdfView.inkMode = enabled }
-    private func addInk(page: Int, points: [CGPoint]) { edit { try $0.ink(page: page, points: points) } }
+    func setInkMode(_ enabled: Bool) { pdfView.inkMode = enabled; if enabled { setInspectMode(false) } }
+
+    func setInspectMode(_ enabled: Bool) {
+        inspectMode = enabled; pdfView.inspectMode = enabled
+        if enabled { pdfView.inkMode = false; cancelAnnotationPlacement() } else { inspected = nil }
+    }
+
+    /// The annotation being inspected, read from the document on screen.
+    var inspectedAnnotation: PDFAnnotation? {
+        _ = revision
+        guard let ref = inspected, let page = document?.page(at: ref.page), page.annotations.indices.contains(ref.slot) else { return nil }
+        return page.annotations[ref.slot]
+    }
+    func updateInspected(_ change: @escaping (PDFAnnotation) -> Void) {
+        guard let ref = inspected else { return }
+        edit { try $0.updateAnnotation(page: ref.page, slot: ref.slot, change) }
+    }
+    func deleteInspected() {
+        guard let ref = inspected else { return }
+        edit { try $0.deleteAnnotation(page: ref.page, slot: ref.slot) }
+        if error == nil { inspected = nil; notice = L("已刪除註解，可以復原。") }
+    }
+    private func addInk(page: Int, points: [CGPoint]) {
+        let color = NSColor(hex: style.inkColor) ?? .systemBlue, width = CGFloat(style.inkWidth)
+        edit { try $0.ink(page: page, points: points, color: color, width: width) }
+    }
     func prepareAnnotation(text: String, freeText: Bool) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         pendingAnnotation = (text, freeText)
@@ -387,7 +418,8 @@ final class ReaderModel: NSObject {
         guard let (text, freeText) = pendingAnnotation else { return }
         cancelAnnotationPlacement()
         let bounds = CGRect(x: point.x, y: point.y, width: freeText ? 160 : 24, height: freeText ? 40 : 24)
-        edit { try $0.annotate(page: page, bounds: bounds, text: text, freeText: freeText) }
+        let current = style
+        edit { try $0.annotate(page: page, bounds: bounds, text: text, freeText: freeText, style: current) }
     }
     func saveCopy(to url: URL) {
         guard let editor, redaction == nil else { return }

@@ -4,6 +4,8 @@ import PDFKit
 final class ReaderPDFView: PDFView {
     var inkMode = false
     var redactDrawing = false
+    var inspectMode = false
+    var onInspect: ((Int, Int)?) -> Void = { _ in }
     var onRedactRect: ((Int, CGRect) -> Void)?
     private var redactStart: (PDFPage, CGPoint)?
     var onPlacement: ((Int, CGPoint) -> Void)?
@@ -69,6 +71,14 @@ final class ReaderPDFView: PDFView {
             let index = document.index(for: page)
             guard index != NSNotFound else { return }
             onPlacement?(index, convert(location, to: page))
+            return
+        }
+        if inspectMode {
+            guard let page = page(for: location, nearest: false), let document else { onInspect(nil); return }
+            let point = convert(location, to: page)
+            let hit = PDFEditing.editableAnnotations(on: page).last { $0.annotation.bounds.insetBy(dx: -3, dy: -3).contains(point) }
+            let index = document.index(for: page)
+            onInspect(hit.flatMap { index == NSNotFound ? nil : (index, $0.slot) })
             return
         }
         if redactDrawing {

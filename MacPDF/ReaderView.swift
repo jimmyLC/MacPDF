@@ -17,6 +17,7 @@ struct ReaderView: View {
     @State private var showingAnnotation = false
     @State private var confirmDelete = false
     @State private var inkMode = false
+    @State private var showingStyle = false
     @State private var search = ""
     @State private var sidebar = true
     @State private var selection: SidebarTab = .pages
@@ -117,6 +118,12 @@ struct ReaderView: View {
                 }
             }
             topBar
+            if model.inspectMode {
+                AnnotationInspector(model: model)
+                    .padding(.trailing, 12).padding(.top, barTop + barHeight + 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
             if let session = model.redaction {
                 RedactionPanel(model: model, session: session)
                     .padding(.trailing, 12).padding(.top, barTop + barHeight + 8).padding(.bottom, 12)
@@ -293,6 +300,11 @@ struct ReaderView: View {
                     GlassIconButton(symbol: "pencil.tip", label: inkMode ? "結束手繪" : "手繪", active: inkMode) {
                         model.cancelAnnotationPlacement(); inkMode.toggle(); model.setInkMode(inkMode)
                     }
+                    GlassIconButton(symbol: "cursorarrow.click.2", label: model.inspectMode ? "結束選取註解" : "選取並修改註解", active: model.inspectMode) {
+                        inkMode = false; model.setInspectMode(!model.inspectMode)
+                    }
+                    GlassIconButton(symbol: "slider.horizontal.3", label: "標註樣式", active: showingStyle) { showingStyle.toggle() }
+                        .popover(isPresented: $showingStyle, arrowEdge: .top) { AnnotationStyleForm(model: model) }
                 }
             }
         }
@@ -304,8 +316,8 @@ struct ReaderView: View {
                 Button { model.markSelection(style: .highlight, color: swatch.color) } label: { Label("螢光筆（\(swatch.name)）", systemImage: "highlighter") }
             }
             Divider()
-            Button { model.markSelection(style: .underline, color: .systemRed) } label: { Label("底線", systemImage: "underline") }
-            Button { model.markSelection(style: .strikeOut, color: .systemRed) } label: { Label("刪除線", systemImage: "strikethrough") }
+            Button { model.markSelection(style: .underline, color: NSColor(hex: model.style.lineColor) ?? .systemRed) } label: { Label("底線", systemImage: "underline") }
+            Button { model.markSelection(style: .strikeOut, color: NSColor(hex: model.style.lineColor) ?? .systemRed) } label: { Label("刪除線", systemImage: "strikethrough") }
         } label: {
             Image(systemName: "highlighter").font(.system(size: 15, weight: .medium)).frame(width: 34, height: 34).contentShape(Circle())
         } primaryAction: { model.highlightSelection() }

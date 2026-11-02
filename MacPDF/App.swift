@@ -78,6 +78,8 @@ struct ReaderCommands: Commands {
                 Button("清除記錄") { PDFWindows.shared.keyModel?.clearRecents() ?? ReaderModel.clearAllRecents() }
                     .disabled(RecentList.shared.urls.isEmpty)
             }
+            Button("儲存到原檔（先備份）…") { PDFWindows.shared.keyModel?.overwriteOriginal() }.keyboardShortcut("s", modifiers: [.command, .option])
+            Button("顯示備份資料夾") { PDFWindows.shared.keyModel?.revealBackups() ?? NSWorkspace.shared.activateFileViewerSelecting([PDFEditing.defaultBackupFolder]) }
             Divider()
             Button("分享…") { if let model = PDFWindows.shared.keyModel { model.share(from: model.pdfView) } }
             Divider()
@@ -103,7 +105,7 @@ struct ReaderCommands: Commands {
             Button("實際大小") { PDFWindows.shared.keyModel?.actualSize() }.keyboardShortcut("0", modifiers: [.command, .option])
         }
         CommandMenu("文件") {
-            Button("文字辨識（OCR）") { PDFWindows.shared.keyModel?.runOCR() }
+            Button("文字辨識（OCR）…") { PDFWindows.shared.keyModel?.sheet = .ocr }
             Button("壓縮…") { PDFWindows.shared.keyModel?.sheet = .compress }
             Divider()
             Button("清除表單欄位") { PDFWindows.shared.keyModel?.resetForm() }

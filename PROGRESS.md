@@ -21,7 +21,8 @@ Updated: 2026-11-02 (Asia/Singapore). M1 is an internal candidate; acceptance is
 
 - M5: blank page, split (each page / ranges), underline, strikethrough, highlight colours and signature are on branch `m5-pages-markup`.
 
-- M6: thumbnail multi-select and drag reorder, export pages as images are on branch `m6-thumbs-images`.
+- M6: thumbnail multi-select and drag reorder, export pages as images are merged to main.
+- M7: remaining PRD P0 items (view modes, search options, recents, share, settings, tabs, decorations, build/combine, blank page options, rotate angles, TIFF, annotation styles and inspector, OCR options, overwrite with backup) are on branch `m7-p0`.
 
 ## Verification
 

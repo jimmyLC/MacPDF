@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum M2Sheet: String, Identifiable {
-    case metadata, encrypt, compress, signature, exportImages, decorate, build, blank
+    case metadata, encrypt, compress, signature, exportImages, decorate, build, blank, ocr
     var id: String { rawValue }
 }
 
@@ -27,6 +27,8 @@ struct MetadataSheet: View {
     @State private var author = ""
     @State private var subject = ""
     @State private var keywords = ""
+    @State private var creator = ""
+    @State private var producer = ""
 
     var body: some View {
         SheetFrame(title: "文件資訊", symbol: "info.circle") {
@@ -35,12 +37,16 @@ struct MetadataSheet: View {
                 TextField("作者", text: $author)
                 TextField("主旨", text: $subject)
                 TextField("關鍵字（以逗號分隔）", text: $keywords)
+                TextField("建立者（建立這份文件的程式）", text: $creator)
+                TextField("產生器（輸出 PDF 的程式）", text: $producer)
+                LabeledContent("建立日期") { Text(model.documentDates.created.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "—") }
+                LabeledContent("修改日期") { Text(model.documentDates.modified.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "—") }
             }
             HStack {
-                Button("清除全部", role: .destructive) { title = ""; author = ""; subject = ""; keywords = "" }
+                Button("清除全部", role: .destructive) { title = ""; author = ""; subject = ""; keywords = ""; creator = ""; producer = "" }
                 Spacer()
                 Button("取消", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
-                Button("儲存") { model.setMetadata(title: title, author: author, subject: subject, keywords: keywords); close() }
+                Button("儲存") { model.setMetadata(title: title, author: author, subject: subject, keywords: keywords, creator: creator, producer: producer); close() }
                     .keyboardShortcut(.defaultAction).prominentGlassButton()
             }
         }
@@ -48,6 +54,7 @@ struct MetadataSheet: View {
             let values = model.metadata
             title = values["title"] ?? ""; author = values["author"] ?? ""
             subject = values["subject"] ?? ""; keywords = values["keywords"] ?? ""
+            creator = values["creator"] ?? ""; producer = values["producer"] ?? ""
         }
     }
 }
@@ -463,11 +470,13 @@ struct BuildSheet: View {
             }
             .frame(height: 170)
             .overlay { if entries.isEmpty { Text("加入圖片、PDF 或空白頁，排好順序後建立。").font(.callout).foregroundStyle(.secondary) } }
+            Text("圖片與空白頁的尺寸").font(.caption).foregroundStyle(.secondary)
             Picker("圖片與空白頁的尺寸", selection: $sheet) {
                 Text("A4").tag(PDFProcessing.PageSheet.a4); Text("Letter").tag(PDFProcessing.PageSheet.letter); Text("跟圖片一樣大").tag(PDFProcessing.PageSheet.image)
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented).labelsHidden()
             if model.document != nil {
-                Picker("放到", selection: $intoCurrent) { Text("新的文件").tag(false); Text("目前的文件").tag(true) }.pickerStyle(.segmented)
+                Text("放到").font(.caption).foregroundStyle(.secondary)
+                Picker("放到", selection: $intoCurrent) { Text("新的文件").tag(false); Text("目前的文件").tag(true) }.pickerStyle(.segmented).labelsHidden()
                 if intoCurrent {
                     Stepper(position == 0 ? L("放在最後") : String(format: L("放在第 %ld 頁前面"), position), value: $position, in: 0...max(model.pageCount, 1))
                 }
@@ -548,5 +557,54 @@ struct BlankPageSheet: View {
         let (n, page, behind) = (count, place - 1, after)
         close()
         DispatchQueue.main.async { model.insertBlankPages(count: n, around: page, after: behind, size: chosen) }
+    }
+}
+
+struct OCRSheet: View {
+    let model: ReaderModel
+    let close: () -> Void
+    static let languages: [(code: String, name: String)] = [("zh-Hant", "繁體中文"), ("zh-Hans", "简体中文"), ("en-US", "English"), ("ja-JP", "日本語"), ("ko-KR", "한국어")]
+    enum Scope: String, Identifiable { case all, current, range; var id: String { rawValue } }
+    @State private var chosen: Set<String> = ["zh-Hant", "en-US"]
+    @State private var scope = Scope.all
+    @State private var range = ""
+
+    private var pages: [Int]? {
+        switch scope {
+        case .all: return nil
+        case .current: return [max(model.currentPage - 1, 0)]
+        case .range:
+            guard let ranges = try? PDFEditing.parseRanges(range, pageCount: model.pageCount) else { return [] }
+            return Array(Set(ranges.flatMap { $0.map { $0 - 1 } })).sorted()
+        }
+    }
+
+    var body: some View {
+        SheetFrame(title: "文字辨識（OCR）", symbol: "text.viewfinder") {
+            Text("辨識語言").font(.subheadline.weight(.medium))
+            HStack(spacing: 10) {
+                ForEach(Self.languages, id: \.code) { language in
+                    Toggle(language.name, isOn: Binding(get: { chosen.contains(language.code) },
+                                                         set: { if $0 { chosen.insert(language.code) } else { chosen.remove(language.code) } }))
+                        .toggleStyle(.checkbox)
+                }
+            }
+            Picker("頁面", selection: $scope) { Text("全部").tag(Scope.all); Text("目前這一頁").tag(Scope.current); Text("範圍").tag(Scope.range) }
+                .pickerStyle(.segmented)
+            if scope == .range { TextField("例如 1-3, 5", text: $range).textFieldStyle(.roundedBorder) }
+            Text("只會辨識沒有文字的頁面；已有文字或旋轉過的頁面會略過並告訴你。辨識完成後可以搜尋與選取文字，也可以復原。").font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+                Button("開始辨識") {
+                    let order = Self.languages.map(\.code).filter { chosen.contains($0) }
+                    let target = pages
+                    close()
+                    DispatchQueue.main.async { model.runOCR(languages: order, pages: target) }
+                }
+                .keyboardShortcut(.defaultAction).prominentGlassButton()
+                .disabled(chosen.isEmpty || (scope == .range && (pages?.isEmpty ?? true)))
+            }
+        }
     }
 }

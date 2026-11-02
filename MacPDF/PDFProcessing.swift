@@ -44,11 +44,13 @@ enum PDFProcessing {
 
     // MARK: OCR
 
-    static func recognize(_ image: CGImage) throws -> [TextLine] {
+    static let defaultOCRLanguages = ["zh-Hant", "en-US"]
+
+    static func recognize(_ image: CGImage, languages: [String] = defaultOCRLanguages) throws -> [TextLine] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
-        request.recognitionLanguages = ["zh-Hant", "en-US"]
+        request.recognitionLanguages = languages.isEmpty ? defaultOCRLanguages : languages
         try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
         return (request.results ?? []).compactMap { observation in
             guard let top = observation.topCandidates(1).first, !top.string.isEmpty else { return nil }

@@ -61,6 +61,7 @@ struct ReaderView: View {
             case .decorate: DecorateSheet(model: model) { model.sheet = nil }
             case .build: BuildSheet(model: model) { model.sheet = nil }
             case .blank: BlankPageSheet(model: model) { model.sheet = nil }
+            case .ocr: OCRSheet(model: model) { model.sheet = nil }
             }
         }
         .task(id: model.notice) {
@@ -231,7 +232,7 @@ struct ReaderView: View {
             }.disabled(busy)
             Button("浮水印、頁首頁尾與頁碼…", systemImage: "text.append") { model.sheet = .decorate }.disabled(busy)
             Menu("掃描頁面", systemImage: "text.viewfinder") {
-                Button("文字辨識（OCR）") { model.runOCR() }
+                Button("文字辨識（OCR）…") { model.sheet = .ocr }
                 Button("壓縮…") { model.sheet = .compress }
             }.disabled(busy)
             Menu("表單", systemImage: "list.bullet.rectangle") {
@@ -262,6 +263,7 @@ struct ReaderView: View {
             Button("復原") { model.undoEdit() }.keyboardShortcut("z").disabled(!model.canUndo || busy)
             Button("重做") { model.redoEdit() }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!model.canRedo || busy)
             Button("另存新檔…") { saveCopy() }.keyboardShortcut("s")
+            Button("儲存到原檔（先備份）…") { model.overwriteOriginal() }.keyboardShortcut("s", modifiers: [.command, .option]).disabled(!model.canOverwriteOriginal)
             Button("列印…") { model.printDocument() }.keyboardShortcut("p")
         } label: {
             Image(systemName: "ellipsis")

@@ -124,3 +124,47 @@ extension PDFEditing {
         try Self.writeNew(output, to: url)
     }
 }
+
+// MARK: Saving over the original
+
+extension PDFEditing {
+    static var defaultBackupFolder: URL {
+        (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("MacPDF/Backups", isDirectory: true)
+    }
+
+    /// Copies the current file to `backupFolder`, then replaces it in one step. If the backup cannot be made the
+    /// original is left untouched. Returns the backup file.
+    @discardableResult
+    static func overwrite(_ url: URL, with data: Data, backupFolder: URL) throws -> URL {
+        guard PDFDocument(data: data) != nil else { throw EditError.cannotSerialize }
+        let manager = FileManager.default
+        try manager.createDirectory(at: backupFolder, withIntermediateDirectories: true)
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let stem = url.deletingPathExtension().lastPathComponent + "-" + formatter.string(from: Date())
+        var backup = backupFolder.appendingPathComponent(stem + ".pdf")
+        var counter = 2
+        while manager.fileExists(atPath: backup.path) && counter < 1000 { backup = backupFolder.appendingPathComponent("\(stem) \(counter).pdf"); counter += 1 }
+        do { try manager.copyItem(at: url, to: backup) } catch { throw EditError.writeFailed(L("無法備份原檔，所以沒有覆寫。")) }
+        let original = (try? manager.attributesOfItem(atPath: url.path)[.size] as? Int) ?? -1
+        let copied = (try? manager.attributesOfItem(atPath: backup.path)[.size] as? Int) ?? -2
+        guard original == copied else { try? manager.removeItem(at: backup); throw EditError.writeFailed(L("備份和原檔大小不一致，所以沒有覆寫。")) }
+        let staging: URL
+        do { staging = try manager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: url, create: true) }
+        catch { throw EditError.writeFailed(L("此儲存位置不支援安全覆寫，請改用另存新檔。")) }
+        defer { try? manager.removeItem(at: staging) }
+        let staged = staging.appendingPathComponent("MacPDF-new.pdf")
+        try data.write(to: staged)
+        do { _ = try manager.replaceItemAt(url, withItemAt: staged) } catch { throw EditError.writeFailed(error.localizedDescription) }
+        return backup
+    }
+
+    func overwriteOriginal(at url: URL, backupFolder: URL = PDFEditing.defaultBackupFolder) throws -> URL {
+        guard !document.isEncrypted else { throw EditError.encryptedInput }
+        guard allowSignatureFieldEdits || !Self.containsSignatureField(document) else { throw EditError.signatureField }
+        guard let data = document.dataRepresentation() else { throw EditError.cannotSerialize }
+        let backup = try Self.overwrite(url, with: data, backupFolder: backupFolder)
+        markDiscarded()
+        return backup
+    }
+}

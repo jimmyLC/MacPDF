@@ -324,4 +324,68 @@ final class M7Tests: XCTestCase {
         let note = PDFAnnotation(bounds: CGRect(x: 60, y: 60, width: 20, height: 20), forType: .text, withProperties: nil); page.addAnnotation(note)
         XCTAssertEqual(PDFEditing.editableAnnotations(on: page).map { $0.annotation.type ?? "" }, ["Text"])
     }
+
+    // MARK: Overwrite with backup, OCR options, metadata, signature fields
+
+    func testOverwriteKeepsABackupAndReplacesAtomically() throws {
+        let folder = try tempFolder()
+        let file = folder.appendingPathComponent("report.pdf")
+        XCTAssertTrue(try textDocument([["original text"]]).write(to: file))
+        let originalBytes = try Data(contentsOf: file)
+        let edit = PDFEditing(document: try textDocument([["edited text"], ["second"]]))
+        let backups = folder.appendingPathComponent("backups")
+        let backup = try edit.overwriteOriginal(at: file, backupFolder: backups)
+        XCTAssertEqual(try Data(contentsOf: backup), originalBytes, "the backup is the old file")
+        XCTAssertEqual(PDFDocument(url: file)?.pageCount, 2)
+        XCTAssertTrue((PDFDocument(url: file)?.string ?? "").contains("edited"))
+        XCTAssertFalse(edit.dirty)
+        XCTAssertTrue(backup.lastPathComponent.hasPrefix("report-"))
+    }
+
+    func testOverwriteLeavesTheOriginalAloneWhenTheBackupFails() throws {
+        let folder = try tempFolder()
+        let file = folder.appendingPathComponent("keep.pdf")
+        XCTAssertTrue(try textDocument([["precious"]]).write(to: file))
+        let before = try Data(contentsOf: file)
+        // A regular file where the backup folder should be makes the backup impossible.
+        let blocker = folder.appendingPathComponent("blocker")
+        try Data("x".utf8).write(to: blocker)
+        let edit = PDFEditing(document: try textDocument([["new"]]))
+        XCTAssertThrowsError(try edit.overwriteOriginal(at: file, backupFolder: blocker))
+        XCTAssertEqual(try Data(contentsOf: file), before)
+    }
+
+    func testOCRWithLanguagesAndPageRange() async throws {
+        let scan = try M2Tests().scanDocument(["Quarterly invoice total", "Another page here"])
+        let url = try tempFolder().appendingPathComponent("scan.pdf")
+        XCTAssertTrue(scan.write(to: url))
+        let model = ReaderModel(); model.open(url)
+        model.runOCR(languages: ["en-US"], pages: [0])
+        for _ in 0..<300 where model.job != nil { try? await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertNil(model.job)
+        XCTAssertTrue(PDFProcessing.hasText(try XCTUnwrap(try XCTUnwrap(PDFDocument(data: try XCTUnwrap(model.document?.dataRepresentation()))).page(at: 0))))
+        XCTAssertFalse(PDFProcessing.hasText(try XCTUnwrap(try XCTUnwrap(PDFDocument(data: try XCTUnwrap(model.document?.dataRepresentation()))).page(at: 1))), "page 2 was outside the range")
+        XCTAssertEqual(ReaderModel.pageList([4, 0, 2]), "1, 3, 5")
+        _ = model.discardChanges()
+    }
+
+    func testCreatorProducerAndDates() throws {
+        let edit = PDFEditing(document: try textDocument([["x"]]))
+        try edit.setMetadata([.creatorAttribute: "Word", .producerAttribute: "MacPDF test"])
+        let reopened = try XCTUnwrap(PDFDocument(data: try XCTUnwrap(edit.document.dataRepresentation())))
+        XCTAssertEqual(reopened.documentAttributes?[PDFDocumentAttribute.creatorAttribute] as? String, "Word")
+    }
+
+    func testSignatureFieldsNeedConfirmationBeforeEditing() throws {
+        let doc = try textDocument([["Sign here"]])
+        let field = PDFAnnotation(bounds: CGRect(x: 72, y: 100, width: 150, height: 40), forType: .widget, withProperties: nil)
+        field.widgetFieldType = .signature
+        try XCTUnwrap(doc.page(at: 0)).addAnnotation(field)
+        let edit = PDFEditing(document: doc)
+        XCTAssertTrue(PDFEditing.containsSignatureField(doc))
+        XCTAssertThrowsError(try edit.insertBlankPage(relativeTo: 0, after: true))
+        edit.allowSignatureFieldEdits = true
+        try edit.insertBlankPage(relativeTo: 0, after: true)
+        XCTAssertEqual(edit.document.pageCount, 2)
+    }
 }

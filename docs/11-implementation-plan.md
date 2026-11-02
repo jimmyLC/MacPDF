@@ -74,6 +74,27 @@ File > Batch process… takes many PDFs (picker or drag), a set of steps (OCR, f
 - Hand-checked on a 300-page file: select, navigate and drag-reorder work (dirty mark, undo enabled, selection follows the moved page). Not hand-checked: Shift/Command-click (the desktop driver cannot send modifier clicks), dragging a multi-page selection, the export sheet and folder panel.
 - Not built: the annotation list sidebar (dropped by decision), keyboard shortcuts for the selection (Delete, arrow keys), moving pages between windows.
 
+## M7 PRD P0 completion
+
+Done in this pass (see tests in `Tests/M7Tests.swift`):
+
+- Viewing: single page, continuous, two-up, two-up continuous, fit page, fit width, actual size (View menu, also in the "..." menu); search with match case, whole word, next/previous (Cmd-G, Shift-Cmd-G); File > Open recent and Clear history (also on the welcome screen); optional document tabs (Settings); Settings with appearance (system/light/dark), language (takes effect on next start) and tab preference.
+- Share sheet (shares a temporary copy of the document as it is now, removed after ten minutes); copy the page as an image; paste a clipboard image as a new page.
+- Pages: Insert blank pages (count, position, size A4/A5/Letter/custom/same as page, landscape); rotate 90/180/270 and all pages; create or combine PDFs from images, PDFs (with page ranges), blank pages and the clipboard, in a chosen order, as a new unsaved document or into the current one at a position; TIFF export.
+- Decorations: text or image watermark (font size, colour, opacity, rotation, position, tiled, behind content), headers and footers with six slots, tokens {page} {pages} {title} {author} {filename} {date}, start number, skip first page, mirrored even pages, page range. Pages are rebuilt (text stays real text; links are restored; a rotated page is rebuilt in the orientation it is seen in).
+- Annotations: styles for new highlights (opacity), underline/strikethrough colour, ink colour and width, text box font/size/colour/alignment, author; "Select and edit annotations" inspector to change colour, opacity, line width, text, font size, author or delete (undoable). Text-box font, size, colour and alignment now survive saving (PDFKit's own font setter wrote an entry it could not read back).
+- OCR: choose languages (Traditional/Simplified Chinese, English, Japanese, Korean), all pages / this page / a range, and the result names pages where nothing was found or that were skipped.
+- Document info: creator and producer fields; creation and modification dates shown.
+- Save over the original: File > Save over original (with backup) copies the file to MacPDF's Backups folder first, verifies the copy, then replaces the file in one step; nothing is replaced if the backup fails. Save a Copy remains the default.
+- Documents with signature fields can be edited after an explicit confirmation that existing signatures become invalid.
+
+Known limits:
+
+- PDFKit stores a highlight's colour but not its translucency, so highlight opacity applies while editing and in this app's view but is not written to the file.
+- Thumbnails are generated on demand in memory; there is no disk cache.
+- The annotation list sidebar and note reply threads were not built (decided out of scope); signature fields are not filled as form values (the signature is placed over the field).
+- Hand-checked: the watermark/header sheet, the create/combine sheet and the new dock buttons render. Not hand-checked: tabs, the Settings window, share sheet, the inspector and style popover, overwrite-with-backup through a real file panel, and the other new sheets.
+
 ## Verification and outstanding work
 
 - Signed, sandbox-enabled Apple Silicon debug build and automated tests pass on the development Mac.

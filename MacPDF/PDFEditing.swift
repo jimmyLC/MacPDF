@@ -13,6 +13,8 @@ final class PDFEditing {
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
     private(set) var dirty = false
+    /// Set once the user has accepted that editing makes existing digital signatures invalid.
+    var allowSignatureFieldEdits = false
 
     init(document: PDFDocument, dirty: Bool = false) { self.document = document; self.dirty = dirty }
     func markDiscarded() { dirty = false }
@@ -28,7 +30,7 @@ final class PDFEditing {
             switch self {
             case .cannotSerialize: return L("無法建立文件快照，未進行修改。")
             case .historyTooLarge: return L("文件過大，無法安全建立復原快照；未進行修改。")
-            case .signatureField: return L("文件包含數位簽章欄位；為避免破壞簽章，目前無法編輯。")
+            case .signatureField: return L("文件包含數位簽章欄位；為避免破壞簽章，需要你確認後才能編輯。")
             case .invalidPage: return L("頁碼超出範圍。")
             case .lastPage: return L("文件必須保留至少一頁。")
             case .noSelection: return L("請先選取文件中的文字。")
@@ -46,7 +48,7 @@ final class PDFEditing {
     }
     func mutate(_ action: (PDFDocument) throws -> Void) throws {
         guard !document.isEncrypted else { throw EditError.encryptedInput }
-        guard !Self.containsSignatureField(document) else { throw EditError.signatureField }
+        guard allowSignatureFieldEdits || !Self.containsSignatureField(document) else { throw EditError.signatureField }
         guard let before = document.dataRepresentation(), let working = PDFDocument(data: before) else { throw EditError.cannotSerialize }
         guard before.count <= maximumHistoryBytes else { throw EditError.historyTooLarge }
         try action(working)
@@ -173,7 +175,7 @@ final class PDFEditing {
     /// Exclusive creation ensures an existing file, including the source, cannot be overwritten.
     func export(to url: URL) throws {
         guard !document.isEncrypted else { throw EditError.encryptedInput }
-        guard !Self.containsSignatureField(document) else { throw EditError.signatureField }
+        guard allowSignatureFieldEdits || !Self.containsSignatureField(document) else { throw EditError.signatureField }
         try Self.writeNew(document, to: url)
         dirty = false
     }

@@ -164,12 +164,29 @@ final class ReaderModel: NSObject {
     private func edit(_ operation: (PDFEditing) throws -> Void) {
         guard let editor, redaction == nil else { return }
         let oldPage = currentPage
-        do {
+        func run() throws {
             try operation(editor)
             replaceDisplayedDocument(editor.document, page: oldPage)
             revision += 1
             saveRecoverySnapshot()
-        } catch { self.error = error.localizedDescription }
+        }
+        do { try run() }
+        catch PDFEditing.EditError.signatureField {
+            // A document with signature fields can still be filled in and signed, but any edit voids signatures already on it.
+            guard confirmSignatureEdit() else { return }
+            editor.allowSignatureFieldEdits = true
+            do { try run() } catch { self.error = error.localizedDescription }
+        }
+        catch { self.error = error.localizedDescription }
+    }
+
+    private func confirmSignatureEdit() -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("這份文件有數位簽章欄位")
+        alert.informativeText = L("繼續編輯會使文件上已有的數位簽章失效（簽章欄位本身不會被移除）。原始檔不會被改動，編輯後的結果要另存新檔。要繼續嗎？")
+        alert.addButton(withTitle: L("繼續編輯")); alert.addButton(withTitle: L("取消"))
+        return alert.runModal() == .alertFirstButtonReturn
     }
     private func saveRecoverySnapshot() {
         guard let editor else { return }
@@ -433,6 +450,26 @@ final class ReaderModel: NSObject {
         catch { self.error = error.localizedDescription }
     }
 
+    /// Replaces the file that was opened with the current contents, after copying it to the Backups folder.
+    func overwriteOriginal() {
+        guard let editor, let url = activeURL, redaction == nil, !editor.document.isEncrypted else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(format: L("要覆寫「%@」嗎？"), url.lastPathComponent)
+        alert.informativeText = L("MacPDF 會先把原檔備份起來，再用目前的內容取代它。備份放在 MacPDF 的備份資料夾，可以隨時取回。")
+        alert.addButton(withTitle: L("備份並覆寫")); alert.addButton(withTitle: L("取消"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            let backup = try editor.overwriteOriginal(at: url)
+            revision += 1
+            do { try recovery.remove(recoveryID); recoveryEntries = recovery.entries() } catch {}
+            notice = String(format: L("已儲存到原檔。備份：%@"), backup.lastPathComponent)
+        } catch { self.error = error.localizedDescription }
+    }
+    var canOverwriteOriginal: Bool { activeURL != nil && (editor?.dirty ?? false) && redaction == nil }
+
+    func revealBackups() { NSWorkspace.shared.activateFileViewerSelecting([PDFEditing.defaultBackupFolder]) }
+
     func extractPages(_ range: ClosedRange<Int>, to url: URL) {
         guard let editor, redaction == nil else { return }
         let scoped = url.startAccessingSecurityScopedResource()
@@ -567,26 +604,47 @@ final class ReaderModel: NSObject {
         return (0..<probe.pageCount).filter { index in probe.page(at: index).map { !PDFProcessing.hasText($0) } ?? false }
     }
 
-    func runOCR() {
+    func runOCR(languages: [String] = PDFProcessing.defaultOCRLanguages, pages requested: [Int]? = nil) {
         guard let document, jobTask == nil else { return }
-        let candidates = pagesWithoutEmbeddedText().filter { document.page(at: $0)?.rotation == 0 }
+        let withoutText = Set(pagesWithoutEmbeddedText())
+        let wanted = requested ?? Array(0..<document.pageCount)
+        // Pages that already have text, or that are turned, are left alone and reported.
+        var skipped: [Int] = []
+        let candidates = wanted.filter { index in
+            let ok = withoutText.contains(index) && document.page(at: index)?.rotation == 0
+            if !ok { skipped.append(index) }
+            return ok
+        }
         guard !candidates.isEmpty else { notice = L("沒有需要辨識的頁面（已有文字，或是旋轉過的頁面）。"); return }
         let start = revision
         job = JobProgress(title: L("文字辨識中"), done: 0, total: candidates.count)
         jobTask = Task { [weak self] in
             var results: [Int: PDFPage] = [:]
+            var empty: [Int] = []
             for (n, index) in candidates.enumerated() {
                 guard let self, !Task.isCancelled else { break }
                 self.job?.done = n
                 guard let page = self.document?.page(at: index),
-                      let image = PDFProcessing.renderImage(of: page, scale: PDFProcessing.ocrScale) else { continue }
-                let lines = (try? await Task.detached(priority: .userInitiated) { try PDFProcessing.recognize(image) }.value) ?? []
-                guard !lines.isEmpty, let rebuilt = PDFProcessing.searchablePage(from: page, lines: lines) else { continue }
+                      let image = PDFProcessing.renderImage(of: page, scale: PDFProcessing.ocrScale) else { empty.append(index); continue }
+                let lines = (try? await Task.detached(priority: .userInitiated) { try PDFProcessing.recognize(image, languages: languages) }.value) ?? []
+                guard !lines.isEmpty, let rebuilt = PDFProcessing.searchablePage(from: page, lines: lines) else { empty.append(index); continue }
                 results[index] = rebuilt
             }
+            let missed = empty, left = skipped
             self?.finishPageJob(results: results, startRevision: start, cancelledMessage: L("已取消文字辨識。"),
-                                emptyMessage: L("沒有辨識到文字。")) { count in String(format: L("已辨識 %ld 頁，現在可以搜尋與選取文字。"), count) }
+                                emptyMessage: missed.isEmpty ? L("沒有辨識到文字。") : String(format: L("沒有辨識到文字（第 %@ 頁）。"), Self.pageList(missed))) { count in
+                var message = String(format: L("已辨識 %ld 頁，現在可以搜尋與選取文字。"), count)
+                if !missed.isEmpty { message += " " + String(format: L("第 %@ 頁沒有辨識到文字。"), Self.pageList(missed)) }
+                if !left.isEmpty && requested != nil { message += " " + String(format: L("第 %@ 頁已有文字或是旋轉過的頁面，已略過。"), Self.pageList(left)) }
+                return message
+            }
         }
+    }
+
+    /// "3, 5, 9" (one-based) for messages.
+    static func pageList(_ pages: [Int]) -> String {
+        let shown = pages.sorted().prefix(8).map { String($0 + 1) }.joined(separator: ", ")
+        return pages.count > 8 ? shown + "…" : shown
     }
 
     func compress(_ preset: PDFProcessing.Preset) {
@@ -663,6 +721,11 @@ final class ReaderModel: NSObject {
     func resetForm() { edit { try $0.resetFormFields() }; if error == nil { notice = L("已清除表單欄位。") } }
     func flattenForms() { edit { try $0.flattenForms() }; if error == nil { notice = L("表單已烙入頁面，無法再填寫。可以復原。") } }
 
+    var documentDates: (created: Date?, modified: Date?) {
+        let attributes = document?.documentAttributes
+        return (attributes?[PDFDocumentAttribute.creationDateAttribute] as? Date, attributes?[PDFDocumentAttribute.modificationDateAttribute] as? Date)
+    }
+
     var metadata: [String: String] {
         guard let attributes = document?.documentAttributes else { return [:] }
         func text(_ key: PDFDocumentAttribute) -> String {
@@ -670,13 +733,16 @@ final class ReaderModel: NSObject {
             if let values = attributes[key] as? [String] { return values.joined(separator: ", ") }
             return ""
         }
-        return ["title": text(.titleAttribute), "author": text(.authorAttribute), "subject": text(.subjectAttribute), "keywords": text(.keywordsAttribute)]
+        return ["title": text(.titleAttribute), "author": text(.authorAttribute), "subject": text(.subjectAttribute), "keywords": text(.keywordsAttribute),
+                "creator": text(.creatorAttribute), "producer": text(.producerAttribute)]
     }
-    func setMetadata(title: String, author: String, subject: String, keywords: String) {
+    func setMetadata(title: String, author: String, subject: String, keywords: String, creator: String = "", producer: String = "") {
         var values: [PDFDocumentAttribute: Any] = [:]
         if !title.isEmpty { values[.titleAttribute] = title }
         if !author.isEmpty { values[.authorAttribute] = author }
         if !subject.isEmpty { values[.subjectAttribute] = subject }
+        if !creator.isEmpty { values[.creatorAttribute] = creator }
+        if !producer.isEmpty { values[.producerAttribute] = producer }
         let words = keywords.split(whereSeparator: { ",，;；".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         if !words.isEmpty { values[.keywordsAttribute] = words }
         edit { try $0.setMetadata(values) }

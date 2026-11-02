@@ -9,6 +9,45 @@ final class ReaderPDFView: PDFView {
     private var stroke: [CGPoint] = []
     private var strokePage: PDFPage?
 
+    /// Room reserved for the floating glass bars so pages scroll underneath them.
+    var contentInsets = NSEdgeInsets() { didSet { needsLayout = true } }
+    private var appliedInsets = NSEdgeInsets()
+
+    override func layout() {
+        super.layout()
+        applyInsets()
+    }
+
+    private func applyInsets() {
+        guard let scroll = scrollView(in: self) else { return }
+        let same = appliedInsets.top == contentInsets.top && appliedInsets.bottom == contentInsets.bottom
+            && appliedInsets.left == contentInsets.left && appliedInsets.right == contentInsets.right
+        if same && !scroll.automaticallyAdjustsContentInsets { return }
+        let wasAtTop = scroll.contentView.bounds.origin.y <= -appliedInsets.top + 1
+        scroll.automaticallyAdjustsContentInsets = false
+        scroll.contentInsets = contentInsets
+        scroll.scrollerInsets = NSEdgeInsets(top: contentInsets.top, left: 0, bottom: contentInsets.bottom, right: 0)
+        appliedInsets = contentInsets
+        if wasAtTop { scroll.contentView.scroll(to: NSPoint(x: scroll.contentView.bounds.origin.x, y: -contentInsets.top)); scroll.reflectScrolledClipView(scroll.contentView) }
+    }
+
+    /// Show the first page's top edge below the floating top bar (used when a document is installed).
+    func scrollToTopSoon() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let scroll = self.scrollView(in: self) else { return }
+            scroll.contentView.scroll(to: NSPoint(x: scroll.contentView.bounds.origin.x, y: -self.contentInsets.top))
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
+    }
+
+    private func scrollView(in view: NSView) -> NSScrollView? {
+        for sub in view.subviews {
+            if let scroll = sub as? NSScrollView { return scroll }
+            if let found = scrollView(in: sub) { return found }
+        }
+        return nil
+    }
+
     override func mouseDown(with event: NSEvent) {
         let location = convert(event.locationInWindow, from: nil)
         if placingAnnotation {

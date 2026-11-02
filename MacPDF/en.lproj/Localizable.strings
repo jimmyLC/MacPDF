@@ -86,3 +86,9 @@
 "目前頁碼 %ld，共 %ld 頁" = "Page %ld of %ld";
 "恢復 %@" = "Restore %@";
 "將刪除第 %ld 頁。此操作可以復原。" = "Page %ld will be deleted. This can be undone.";
+"本機處理，不上傳、不追蹤" = "Processed on your Mac. Never uploaded, never tracked.";
+"或把 PDF 拖曳到這個視窗" = "or drop a PDF anywhere in this window";
+"放開以開啟 PDF" = "Drop to open PDF";
+"更多操作" = "More actions";
+"已編輯，尚未儲存" = "Edited, not saved";
+"恢復" = "Restore";

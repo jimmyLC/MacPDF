@@ -33,10 +33,14 @@ import SwiftUI
     }
     private func createWindow() -> NSWindowController {
         let model = ReaderModel()
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 700), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 700), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = model.title
         window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.minSize = NSSize(width: 780, height: 520)
         window.contentViewController = NSHostingController(rootView: ReaderView(model: model) { [weak self] url in self?.open([url]) })
+        window.setContentSize(NSSize(width: 1100, height: 760))
         let controller = NSWindowController(window: window)
         controllers.append(controller)
         models[ObjectIdentifier(controller)] = model

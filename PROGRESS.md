@@ -10,6 +10,8 @@ Updated: 2026-11-02 (Asia/Singapore). M1 is an internal candidate; acceptance is
 - `PDFWindows` is the sole document-window owner, replacing conflicting SwiftUI and AppDelegate routing. Merge/extraction remap local destinations and bookmarks; links to pages outside an extracted range are disabled.
 - Cross-volume save uses an item-replacement directory where needed. Sandbox Save-panel export to an isolated APFS volume was manually tested on an earlier build.
 
+- UI redesign (branch `redesign/liquid-glass`, uncommitted): floating Liquid Glass top bar, bottom tool dock and sidebar over an ambient background; new welcome screen and drop overlay. macOS 26+ uses the system glass; macOS 14–25 falls back to materials. Only checked visually on macOS 27 dark mode; light mode and macOS 14–25 fallback are unverified.
+
 ## Verification
 
 - `python3 scripts/accept-m1.py`: 16 passed, 0 failed, 1 skipped on Apple Silicon/macOS 27; the skipped test requires a mounted isolated external test volume. Full local evidence is in ignored `build/acceptance/`.

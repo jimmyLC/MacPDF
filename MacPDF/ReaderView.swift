@@ -18,105 +18,26 @@ struct ReaderView: View {
     @State private var inkMode = false
     @State private var search = ""
     @State private var sidebar = true
-    @State private var selection: Int = 0
+    @State private var selection: SidebarTab = .pages
     @State private var showingPassword = false
     @State private var password = ""
+    @State private var dropTargeted = false
+    @FocusState private var searchFocused: Bool
+
+    private let sidebarWidth: CGFloat = 252
+    private let barTop: CGFloat = 8
+    private let barHeight: CGFloat = 44
 
     var body: some View {
-        HSplitView {
-            if sidebar, let document = model.document {
-                VStack {
-                    Picker("側邊欄", selection: $selection) {
-                        Text("頁面").tag(0); Text("目錄").tag(1); Text("搜尋").tag(2)
-                    }.pickerStyle(.segmented).padding(8)
-                    if selection == 0 {
-                        ThumbnailView(document: document, pdfView: model.pdfView)
-                    } else if selection == 1 {
-                        OutlineList(document: document, pdfView: model.pdfView)
-                    } else {
-                        TextField("搜尋 PDF", text: $search)
-                            .textFieldStyle(.roundedBorder).padding(.horizontal)
-                            .onSubmit { model.find(search) }
-                        if model.isSearching {
-                            HStack { ProgressView().controlSize(.small); Text("搜尋中…"); Button("停止") { model.cancelSearch() } }.padding(.horizontal)
-                        }
-                        if model.hasSearched && !model.isSearching && model.results.isEmpty {
-                            Text("找不到符合的文字").foregroundStyle(.secondary).padding()
-                        }
-                        List(model.results.indices, id: \.self) { index in
-                            Button(model.resultTitle(index)) { model.goToResult(index) }
-                                .buttonStyle(.plain)
-                        }
-                    }
-                }.frame(minWidth: 190, idealWidth: 230, maxWidth: 350)
-            }
-            if model.document != nil {
-                VStack(spacing: 0) {
-                    if model.isPlacingAnnotation {
-                        HStack { Text("點一下頁面放置註解"); Spacer(); Button("取消") { model.cancelAnnotationPlacement() } }.padding(8)
-                    }
-                    PDFCanvas(pdfView: model.pdfView).frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            } else {
-                VStack(spacing: 16) {
-                    Image(systemName: "doc.richtext").font(.system(size: 52)).foregroundStyle(.secondary)
-                    Text("開啟 PDF 開始閱讀").font(.title2)
-                    Button("開啟 PDF…") { choosing = true }.keyboardShortcut("o")
-                    if !model.recoveryEntries.isEmpty {
-                        Text("可恢復的文件").font(.headline)
-                        ForEach(model.recoveryEntries) { entry in
-                            HStack {
-                                Button(String(format: L("恢復 %@"), entry.title)) { model.restore(entry) }
-                                Button("丟棄", role: .destructive) { model.discardRecovery(entry) }
-                            }
-                        }
-                    }
-                    if !model.recents.isEmpty {
-                        Text("最近開啟").foregroundStyle(.secondary)
-                        ForEach(model.recents, id: \.absoluteString) { url in
-                            Button(url.lastPathComponent) { model.openRecent(url) }.buttonStyle(.link)
-                        }
-                    }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+        ZStack {
+            AmbientBackground()
+            if model.document != nil { documentLayer } else { WelcomeView(model: model) { choosing = true } }
         }
+        .overlay { if dropTargeted { dropOverlay } }
+        .ignoresSafeArea()
         .background(WindowCloseGuard(model: model))
-        .frame(minWidth: 700, minHeight: 500)
+        .frame(minWidth: 780, minHeight: 520)
         .navigationTitle(model.title + (model.isDirty ? " •" : ""))
-        .safeAreaInset(edge: .top) {
-            HStack {
-                Button { choosing = true } label: { Label("開啟", systemImage: "folder") }
-                Button { sidebar.toggle() } label: { Label("側邊欄", systemImage: "sidebar.left") }
-                Button { model.goToPage(model.currentPage - 1) } label: { Label("上一頁", systemImage: "chevron.up") }
-                    .disabled(model.currentPage <= 1)
-                Text("\(model.currentPage) / \(model.pageCount)").monospacedDigit().accessibilityLabel(String(format: L("目前頁碼 %ld，共 %ld 頁"), model.currentPage, model.pageCount))
-                Button { model.goToPage(model.currentPage + 1) } label: { Label("下一頁", systemImage: "chevron.down") }
-                    .disabled(model.currentPage == 0 || model.currentPage >= model.pageCount)
-                Menu {
-                    Button("順時針旋轉這一頁") { model.rotateCurrentPage() }
-                    Button("向前移動這一頁") { model.moveCurrentPage(by: -1) }.disabled(model.currentPage <= 1)
-                    Button("向後移動這一頁") { model.moveCurrentPage(by: 1) }.disabled(model.currentPage >= model.pageCount)
-                    Button("刪除這一頁", role: .destructive) { confirmDelete = true }.disabled(model.pageCount <= 1)
-                    Divider()
-                    Button("合併 PDF 到最後…") { choosingMerge = true }
-                    Button("擷取頁面／分割…") { extractPages() }
-                    Button("標示選取文字") { model.highlightSelection() }
-                    Button("新增便條…") { annotationFreeText = false; showingAnnotation = true }
-                    Button("新增文字方塊…") { annotationFreeText = true; showingAnnotation = true }
-                    Divider()
-                    Button("復原") { model.undoEdit() }.keyboardShortcut("z").disabled(!model.canUndo)
-                    Button("重做") { model.redoEdit() }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!model.canRedo)
-                    Button("另存新檔…") { saveCopy() }.keyboardShortcut("s")
-                    Button("列印…") { model.printDocument() }.keyboardShortcut("p")
-                } label: { Label("編輯", systemImage: "pencil") }.disabled(model.document == nil)
-                Button { model.cancelAnnotationPlacement(); inkMode.toggle(); model.setInkMode(inkMode) } label: { Label(inkMode ? "結束手繪" : "手繪", systemImage: inkMode ? "pencil.tip.crop.circle.badge.minus" : "pencil.tip") }.disabled(model.document == nil)
-                Button { saveCopy() } label: { Label("另存新檔", systemImage: "square.and.arrow.down") }.disabled(model.document == nil)
-                Button { model.pdfView.zoomOut(nil) } label: { Label("縮小", systemImage: "minus.magnifyingglass") }
-                Button { model.pdfView.zoomIn(nil) } label: { Label("放大", systemImage: "plus.magnifyingglass") }
-                Button { model.pdfView.autoScales = true } label: { Label("符合頁面", systemImage: "arrow.up.left.and.arrow.down.right") }
-                Button { selection = 2; sidebar = true } label: { Label("搜尋", systemImage: "magnifyingglass") }
-            }
-        }
         .fileImporter(isPresented: $choosing, allowedContentTypes: [.pdf]) { result in
             switch result {
             case .success(let url): openDocument(url)
@@ -138,7 +59,7 @@ struct ReaderView: View {
             Button("繼續") { inkMode = false; model.setInkMode(false); model.prepareAnnotation(text: annotationText, freeText: annotationFreeText); annotationText = "" }
             Button("取消", role: .cancel) { annotationText = "" }
         } message: { Text("輸入內容後，點一下頁面放置註解。") }
-        .onDrop(of: [UTType.fileURL], isTargeted: nil) { providers in
+        .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
             guard !providers.isEmpty else { return false }
             for provider in providers {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
@@ -158,6 +79,149 @@ struct ReaderView: View {
             Button("好") { model.error = nil }
         } message: { Text(model.error ?? "") }
     }
+
+    // MARK: Layers
+
+    private var documentLayer: some View {
+        ZStack(alignment: .top) {
+            HStack(spacing: 0) {
+                if sidebar {
+                    SidebarPanel(model: model, selection: $selection, search: $search, searchFocused: $searchFocused)
+                        .frame(width: sidebarWidth)
+                        .padding(.leading, 12).padding(.top, barTop + barHeight + 8).padding(.bottom, 12)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+                ZStack(alignment: .bottom) {
+                    PDFCanvas(pdfView: model.pdfView, topInset: barTop + barHeight + 6, bottomInset: 84)
+                    bottomDock.padding(.bottom, 16)
+                }
+            }
+            topBar
+            if model.isPlacingAnnotation { placementBanner.padding(.top, barTop + barHeight + 12).transition(.move(edge: .top).combined(with: .opacity)) }
+        }
+        .animation(.smooth(duration: 0.28), value: sidebar)
+        .animation(.smooth(duration: 0.25), value: model.isPlacingAnnotation)
+    }
+
+    private var dropOverlay: some View {
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .strokeBorder(Color.accentColor.opacity(0.85), style: StrokeStyle(lineWidth: 2.5, dash: [10, 8]))
+            .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Color.accentColor.opacity(0.08)))
+            .overlay {
+                Label("放開以開啟 PDF", systemImage: "arrow.down.doc.fill")
+                    .font(.title3.weight(.medium)).padding(.horizontal, 22).padding(.vertical, 14)
+                    .glassSurface(in: Capsule())
+            }
+            .padding(12).allowsHitTesting(false)
+            .transition(.opacity)
+    }
+
+    // MARK: Top bar
+
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            GlassCapsule {
+                GlassIconButton(symbol: "sidebar.left", label: "側邊欄", active: false,
+                                shortcut: KeyboardShortcut("s", modifiers: [.command, .control])) { sidebar.toggle() }
+            }
+            Spacer(minLength: 8)
+            titleChip
+            Spacer(minLength: 8)
+            GlassCapsule {
+                GlassIconButton(symbol: "magnifyingglass", label: "搜尋", shortcut: KeyboardShortcut("f")) {
+                    selection = .search; sidebar = true; searchFocused = true
+                }
+                GlassDivider()
+                GlassIconButton(symbol: "arrow.uturn.backward", label: "復原") { model.undoEdit() }.disabled(!model.canUndo)
+                GlassIconButton(symbol: "arrow.uturn.forward", label: "重做") { model.redoEdit() }.disabled(!model.canRedo)
+                GlassDivider()
+                GlassIconButton(symbol: "square.and.arrow.down", label: "另存新檔") { model.saveCopyWithPanel() }
+                moreMenu
+            }
+        }
+        .padding(.leading, 84).padding(.trailing, 14).padding(.top, barTop)
+        .frame(height: barTop + barHeight, alignment: .top)
+    }
+
+    private var titleChip: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.fill").foregroundStyle(Color.accentColor).font(.system(size: 13))
+            Text(model.title).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.middle)
+            if model.isDirty {
+                Circle().fill(Color.orange).frame(width: 7, height: 7).help("已編輯，尚未儲存")
+            }
+        }
+        .padding(.horizontal, 16).frame(height: 36).frame(maxWidth: 300)
+        .glassSurface(in: Capsule())
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button("順時針旋轉這一頁") { model.rotateCurrentPage() }
+            Button("向前移動這一頁") { model.moveCurrentPage(by: -1) }.disabled(model.currentPage <= 1)
+            Button("向後移動這一頁") { model.moveCurrentPage(by: 1) }.disabled(model.currentPage >= model.pageCount)
+            Button("刪除這一頁", role: .destructive) { confirmDelete = true }.disabled(model.pageCount <= 1)
+            Divider()
+            Button("合併 PDF 到最後…") { choosingMerge = true }
+            Button("擷取頁面／分割…") { extractPages() }
+            Divider()
+            Button("復原") { model.undoEdit() }.keyboardShortcut("z").disabled(!model.canUndo)
+            Button("重做") { model.redoEdit() }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!model.canRedo)
+            Button("另存新檔…") { saveCopy() }.keyboardShortcut("s")
+            Button("列印…") { model.printDocument() }.keyboardShortcut("p")
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 34, height: 34).contentShape(Circle())
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .help("更多操作").accessibilityLabel("更多操作")
+    }
+
+    // MARK: Bottom dock
+
+    private var bottomDock: some View {
+        GlassGroup(spacing: 14) {
+            HStack(spacing: 12) {
+                GlassCapsule {
+                    GlassIconButton(symbol: "chevron.up", label: "上一頁") { model.goToPage(model.currentPage - 1) }
+                        .disabled(model.currentPage <= 1)
+                    Text("\(model.currentPage) / \(model.pageCount)")
+                        .font(.system(size: 13, weight: .medium)).monospacedDigit()
+                        .frame(minWidth: 62)
+                        .accessibilityLabel(String(format: L("目前頁碼 %ld，共 %ld 頁"), model.currentPage, model.pageCount))
+                    GlassIconButton(symbol: "chevron.down", label: "下一頁") { model.goToPage(model.currentPage + 1) }
+                        .disabled(model.currentPage == 0 || model.currentPage >= model.pageCount)
+                }
+                GlassCapsule {
+                    GlassIconButton(symbol: "minus.magnifyingglass", label: "縮小", shortcut: KeyboardShortcut("-")) { model.pdfView.zoomOut(nil) }
+                    GlassIconButton(symbol: "arrow.up.left.and.arrow.down.right", label: "符合頁面", shortcut: KeyboardShortcut("0")) { model.pdfView.autoScales = true }
+                    GlassIconButton(symbol: "plus.magnifyingglass", label: "放大", shortcut: KeyboardShortcut("=")) { model.pdfView.zoomIn(nil) }
+                }
+                GlassCapsule {
+                    GlassIconButton(symbol: "highlighter", label: "標示選取文字") { model.highlightSelection() }
+                    GlassIconButton(symbol: "note.text", label: "新增便條…") { annotationFreeText = false; showingAnnotation = true }
+                    GlassIconButton(symbol: "character.textbox", label: "新增文字方塊…") { annotationFreeText = true; showingAnnotation = true }
+                    GlassIconButton(symbol: "pencil.tip", label: inkMode ? "結束手繪" : "手繪", active: inkMode) {
+                        model.cancelAnnotationPlacement(); inkMode.toggle(); model.setInkMode(inkMode)
+                    }
+                }
+            }
+        }
+    }
+
+    private var placementBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "hand.point.up.left.fill").foregroundStyle(Color.accentColor)
+            Text("點一下頁面放置註解").font(.system(size: 13, weight: .medium))
+            Button("取消") { model.cancelAnnotationPlacement() }.controlSize(.small)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 9)
+        .glassSurface(in: Capsule())
+    }
+
+    // MARK: Actions
+
     private func extractPages() {
         let alert = NSAlert()
         alert.messageText = L("擷取頁面")
@@ -181,17 +245,122 @@ struct ReaderView: View {
     }
 }
 
+// MARK: - Sidebar
+
+enum SidebarTab: Int, CaseIterable {
+    case pages, outline, search
+    var symbol: String {
+        switch self { case .pages: "square.grid.2x2"; case .outline: "list.bullet.indent"; case .search: "magnifyingglass" }
+    }
+    var label: LocalizedStringKey {
+        switch self { case .pages: "頁面"; case .outline: "目錄"; case .search: "搜尋" }
+    }
+}
+
+struct SidebarPanel: View {
+    let model: ReaderModel
+    @Binding var selection: SidebarTab
+    @Binding var search: String
+    var searchFocused: FocusState<Bool>.Binding
+    @Namespace private var tabNamespace
+
+    var body: some View {
+        VStack(spacing: 0) {
+            tabs.padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
+            Group {
+                if let document = model.document {
+                    switch selection {
+                    case .pages: ThumbnailView(document: document, pdfView: model.pdfView)
+                    case .outline: OutlineList(document: document, pdfView: model.pdfView)
+                    case .search: searchPane
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .glassSurface(in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    private var tabs: some View {
+        HStack(spacing: 2) {
+            ForEach(SidebarTab.allCases, id: \.rawValue) { tab in
+                Button { withAnimation(.smooth(duration: 0.22)) { selection = tab } } label: {
+                    Image(systemName: tab.symbol)
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(maxWidth: .infinity).frame(height: 28)
+                        .foregroundStyle(selection == tab ? Color.primary : Color.secondary)
+                        .background {
+                            if selection == tab {
+                                Capsule().fill(Color.primary.opacity(0.13)).matchedGeometryEffect(id: "tab", in: tabNamespace)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain).help(tab.label).accessibilityLabel(tab.label)
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(Color.primary.opacity(0.06)))
+    }
+
+    private var searchPane: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.system(size: 12))
+                TextField("搜尋 PDF", text: $search)
+                    .textFieldStyle(.plain).focused(searchFocused)
+                    .onSubmit { model.find(search) }
+                if !search.isEmpty {
+                    Button { search = ""; model.find("") } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                        .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12).frame(height: 32)
+            .background(Capsule().fill(Color.primary.opacity(0.08)))
+            .padding(.horizontal, 12)
+            if model.isSearching {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small); Text("搜尋中…").font(.callout)
+                    Spacer()
+                    Button("停止") { model.cancelSearch() }.controlSize(.small)
+                }.padding(.horizontal, 14)
+            }
+            if model.hasSearched && !model.isSearching && model.results.isEmpty {
+                ContentUnavailableView("找不到符合的文字", systemImage: "text.magnifyingglass")
+            } else {
+                List(model.results.indices, id: \.self) { index in
+                    Button { model.goToResult(index) } label: {
+                        Text(model.resultTitle(index)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(Color.clear)
+                }
+                .scrollContentBackground(.hidden)
+            }
+        }
+    }
+}
+
+// MARK: - PDFKit bridges
+
 struct PDFCanvas: NSViewRepresentable {
-    let pdfView: PDFView
-    func makeNSView(context: Context) -> PDFView { pdfView }
-    func updateNSView(_ view: PDFView, context: Context) {}
+    let pdfView: ReaderPDFView
+    var topInset: CGFloat = 0
+    var bottomInset: CGFloat = 0
+    func makeNSView(context: Context) -> ReaderPDFView { pdfView }
+    func updateNSView(_ view: ReaderPDFView, context: Context) {
+        view.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: bottomInset, right: 0)
+    }
 }
 
 struct ThumbnailView: NSViewRepresentable {
     let document: PDFDocument
     let pdfView: PDFView
     func makeNSView(context: Context) -> PDFThumbnailView {
-        let view = PDFThumbnailView(); view.pdfView = pdfView; view.thumbnailSize = NSSize(width: 120, height: 160); return view
+        let view = PDFThumbnailView(); view.pdfView = pdfView; view.thumbnailSize = NSSize(width: 120, height: 160)
+        view.backgroundColor = .clear
+        return view
     }
     func updateNSView(_ view: PDFThumbnailView, context: Context) { view.pdfView = pdfView }
 }
@@ -204,6 +373,7 @@ struct OutlineList: View {
             List { ForEach(0..<root.numberOfChildren, id: \.self) { index in
                 if let child = root.child(at: index) { OutlineRow(outline: child, pdfView: pdfView) }
             }}
+            .scrollContentBackground(.hidden)
         } else { ContentUnavailableView("沒有目錄", systemImage: "list.bullet.indent") }
     }
 }

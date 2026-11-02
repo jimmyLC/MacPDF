@@ -40,6 +40,12 @@ final class ReaderModel: NSObject {
         pdfView.onInk = { [weak self] page, points in self?.addInk(page: page, points: points) }
         pdfView.onPlacement = { [weak self] page, point in self?.placeAnnotation(page: page, point: point) }
         pdfView.autoScales = true
+        pdfView.backgroundColor = NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(red: 0.10, green: 0.105, blue: 0.15, alpha: 1)
+                : NSColor(red: 0.91, green: 0.925, blue: 0.96, alpha: 1)
+        }
+        pdfView.pageBreakMargins = NSEdgeInsets(top: 8, left: 28, bottom: 8, right: 28)
         pdfView.displayMode = .singlePageContinuous
         pdfView.displayDirection = .vertical
         NotificationCenter.default.addObserver(self, selector: #selector(pageChanged(_:)), name: .PDFViewPageChanged, object: pdfView)
@@ -93,6 +99,7 @@ final class ReaderModel: NSObject {
         activeURL = url; activeScoped = scoped; displayName = recoveredTitle
         editor = PDFEditing(document: candidate)
         document = candidate; pdfView.document = candidate; pdfView.autoScales = true
+        pdfView.scrollToTopSoon()
         results = []
         hasSearched = false
         updatePage()

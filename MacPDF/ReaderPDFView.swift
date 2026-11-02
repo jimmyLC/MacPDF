@@ -40,6 +40,17 @@ final class ReaderPDFView: PDFView {
         }
     }
 
+    // PDFKit aligns a page to the clip view's origin; shift it below the floating top bar.
+    override func go(to page: PDFPage) { super.go(to: page); nudgeForInsets() }
+    override func go(to destination: PDFDestination) { super.go(to: destination); nudgeForInsets() }
+    private func nudgeForInsets() {
+        guard contentInsets.top > 0, let scroll = scrollView(in: self) else { return }
+        var origin = scroll.contentView.bounds.origin
+        origin.y -= contentInsets.top
+        scroll.contentView.scroll(to: origin)
+        scroll.reflectScrolledClipView(scroll.contentView)
+    }
+
     private func scrollView(in view: NSView) -> NSScrollView? {
         for sub in view.subviews {
             if let scroll = sub as? NSScrollView { return scroll }

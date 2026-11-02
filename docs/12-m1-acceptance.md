@@ -29,7 +29,8 @@ The window tests use an isolated PDFWindows instance and suppress presentation, 
 | Unsaved close and quit prompts | Passed on earlier reader build |
 | Force-quit/relaunch recovery | Passed on earlier reader build |
 | Print preview | Passed on earlier reader build |
-| Current window-owner build: controls/menu/close visual smoke | Pending; desktop driver returned tool_invocation_failed even for list_windows |
+| Current window-owner build (Liquid Glass UI): launch, welcome screen, open via Finder-style `open -a`, note tool placement, dirty marker + undo enabled, close prompt (Cancel keeps window, Discard closes) | Passed 2026-11-02, macOS 27 / Apple Silicon, dark mode, via desktop driver |
+| Liquid Glass UI: light mode, macOS 14–25 material fallback, highlight/text box/ink tools, Edit menu actions | Pending |
 | Finder-to-reader drag gesture | Pending |
 
 Earlier manual results are not presented as proof of the changed window shell. Current-shell smoke checks must be rerun once, after desktop automation is available. Do not repeatedly retest all PDF operations through Finder.

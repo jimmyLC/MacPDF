@@ -5,7 +5,7 @@
 | 產品 | MacPDF |
 | 版本 | 0.2（Planning） |
 | 日期 | 2026-11-02 |
-| 目標平台 | macOS 14+，Universal 2（arm64 + x86_64） |
+| 目標平台 | macOS 14+，僅 Apple Silicon（arm64）；不支援 Intel（2026-11-02 決定） |
 | 語言 | Swift 6 |
 | UI | SwiftUI + AppKit bridges |
 | PDF | PDFKit + CoreGraphics |

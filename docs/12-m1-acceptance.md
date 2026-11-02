@@ -37,4 +37,4 @@ Earlier manual results are not presented as proof of the changed window shell. C
 
 ## Compatibility envelope
 
-Apple Silicon runtime tested on the development Mac. Universal compilation does not prove Intel runtime or macOS 14 compatibility. Network/exFAT volumes, malformed PDFs and a representative large-document corpus have no general compatibility claim. Encrypted/signature-field document editing remains unsupported. These are explicit limitations, not passed acceptance items.
+Apple Silicon runtime tested on the development Mac. Intel is out of scope (Apple Silicon only). Compilation does not prove macOS 14 compatibility. Network/exFAT volumes, malformed PDFs and a representative large-document corpus have no general compatibility claim. Encrypted/signature-field document editing remains unsupported. These are explicit limitations, not passed acceptance items.

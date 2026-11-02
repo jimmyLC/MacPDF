@@ -5,7 +5,7 @@
 
 **Repository:** MacPDF  
 **Status:** Internal development / M1 validation
-**Target:** macOS 14+ · Apple Silicon + Intel · Swift 6 + SwiftUI + PDFKit + Vision  
+**Target:** macOS 14+ · Apple Silicon only (M-series) · Swift 6 + SwiftUI + PDFKit + Vision  
 **Scope:** A RevPDF-class daily PDF workflow, built for personal/internal use first.
 
 ---

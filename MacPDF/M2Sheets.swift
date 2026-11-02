@@ -15,7 +15,7 @@ private struct SheetFrame<Content: View>: View {
             content
         }
         .padding(24)
-        .frame(width: 400)
+        .frame(width: 520)
     }
 }
 

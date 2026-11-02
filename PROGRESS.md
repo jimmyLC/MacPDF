@@ -21,6 +21,8 @@ Updated: 2026-11-02 (Asia/Singapore). M1 is an internal candidate; acceptance is
 
 - M5: blank page, split (each page / ranges), underline, strikethrough, highlight colours and signature are on branch `m5-pages-markup`.
 
+- M6: thumbnail multi-select and drag reorder, export pages as images are on branch `m6-thumbs-images`.
+
 ## Verification
 
 - `python3 scripts/accept-m1.py`: 16 passed, 0 failed, 1 skipped on Apple Silicon/macOS 27; the skipped test requires a mounted isolated external test volume. Full local evidence is in ignored `build/acceptance/`.

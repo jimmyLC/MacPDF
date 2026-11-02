@@ -56,6 +56,7 @@ struct ReaderView: View {
             case .encrypt: EncryptSheet(model: model) { model.sheet = nil }
             case .compress: CompressSheet(model: model) { model.sheet = nil }
             case .signature: SignatureSheet(model: model) { model.sheet = nil }
+            case .exportImages: ExportImagesSheet(model: model) { model.sheet = nil }
             }
         }
         .task(id: model.notice) {
@@ -66,7 +67,10 @@ struct ReaderView: View {
         .alert("刪除頁面？", isPresented: $confirmDelete) {
             Button("刪除", role: .destructive) { model.deleteCurrentPage() }
             Button("取消", role: .cancel) {}
-        } message: { Text(String(format: L("將刪除第 %ld 頁。此操作可以復原。"), model.currentPage)) }
+        } message: {
+            let pages = model.targetPages
+            Text(pages.count > 1 ? String(format: L("將刪除 %ld 頁。此操作可以復原。"), pages.count) : String(format: L("將刪除第 %ld 頁。此操作可以復原。"), (pages.first ?? 0) + 1))
+        }
         .alert(annotationFreeText ? "新增文字方塊" : "新增便條", isPresented: $showingAnnotation) {
             TextField("內容", text: $annotationText)
             Button("繼續") { inkMode = false; model.setInkMode(false); model.prepareAnnotation(text: annotationText, freeText: annotationFreeText); annotationText = "" }
@@ -99,7 +103,7 @@ struct ReaderView: View {
         ZStack(alignment: .top) {
             HStack(spacing: 0) {
                 if sidebar {
-                    SidebarPanel(model: model, selection: $selection, search: $search, searchFocused: $searchFocused)
+                    SidebarPanel(model: model, extractSelection: { extractSelectedPages() }, selection: $selection, search: $search, searchFocused: $searchFocused)
                         .frame(width: sidebarWidth)
                         .padding(.leading, 12).padding(.top, barTop + barHeight + 8).padding(.bottom, 12)
                         .transition(.move(edge: .leading).combined(with: .opacity))
@@ -190,15 +194,20 @@ struct ReaderView: View {
                 Button("在這一頁前面插入空白頁") { model.insertBlankPage(after: false) }
                 Button("在這一頁後面插入空白頁") { model.insertBlankPage(after: true) }
                 Divider()
-                Button("順時針旋轉這一頁") { model.rotateCurrentPage() }
-                Button("向前移動這一頁") { model.moveCurrentPage(by: -1) }.disabled(model.currentPage <= 1)
-                Button("向後移動這一頁") { model.moveCurrentPage(by: 1) }.disabled(model.currentPage >= model.pageCount)
-                Button("刪除這一頁", role: .destructive) { confirmDelete = true }.disabled(model.pageCount <= 1)
+                let many = model.targetPages.count > 1
+                Button(many ? "順時針旋轉選取的頁面" : "順時針旋轉這一頁") { model.rotateCurrentPage() }
+                Button(many ? "向前移動選取的頁面" : "向前移動這一頁") { model.moveCurrentPage(by: -1) }.disabled((model.targetPages.first ?? 0) <= 0)
+                Button(many ? "向後移動選取的頁面" : "向後移動這一頁") { model.moveCurrentPage(by: 1) }.disabled((model.targetPages.last ?? 0) >= model.pageCount - 1)
+                Button(many ? "刪除選取的頁面" : "刪除這一頁", role: .destructive) { confirmDelete = true }.disabled(model.targetPages.count >= model.pageCount)
+                Divider()
+                Button("選取全部頁面") { model.selectAllPages() }
+                Button("取消選取") { model.clearPageSelection() }.disabled(model.selectedPages.isEmpty)
             }.disabled(busy)
             Menu("插入與擷取", systemImage: "plus.rectangle.on.rectangle") {
                 Button("合併 PDF 到最後…") { present(.merge) }
                 Button("從圖片新增頁面…") { present(.images) }
                 Button("擷取頁面…") { extractPages() }
+                Button("匯出為圖片…") { model.sheet = .exportImages }
                 Button("分割成每頁一個檔案…") { model.splitPages(rangesText: nil) }
                 Button("依範圍分割…") { splitByRanges() }
             }.disabled(busy)
@@ -340,6 +349,11 @@ struct ReaderView: View {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         model.splitPages(rangesText: field.stringValue)
     }
+    private func extractSelectedPages() {
+        let panel = NSSavePanel(); panel.allowedContentTypes = [.pdf]; panel.nameFieldStringValue = "MacPDF-擷取.pdf"
+        panel.message = L("請選擇新的檔名；MacPDF 不會覆寫現有檔案。")
+        if panel.runModal() == .OK, let url = panel.url { model.extractSelectedPages(to: url) }
+    }
     private func saveCopy() { model.saveCopyWithPanel() }
     private func openDocument(_ url: URL) {
         if model.document == nil && !model.needsPassword { model.open(url) }
@@ -361,6 +375,7 @@ enum SidebarTab: Int, CaseIterable {
 
 struct SidebarPanel: View {
     let model: ReaderModel
+    var extractSelection: () -> Void = {}
     @Binding var selection: SidebarTab
     @Binding var search: String
     var searchFocused: FocusState<Bool>.Binding
@@ -372,7 +387,7 @@ struct SidebarPanel: View {
             Group {
                 if let document = model.document {
                     switch selection {
-                    case .pages: ThumbnailView(document: document, pdfView: model.pdfView)
+                    case .pages: ThumbnailGrid(model: model, extract: extractSelection, exportImages: { model.sheet = .exportImages })
                     case .outline: OutlineList(document: document, pdfView: model.pdfView)
                     case .search: searchPane
                     }

@@ -66,6 +66,14 @@ File > Batch process… takes many PDFs (picker or drag), a set of steps (OCR, f
 - Not done: drag-to-reorder and multi-select of thumbnails, sizing a signature after placing it (fixed 160 pt wide; undo and place again), a digital (certificate) signature, a signature field filled by the signature tool.
 - Hand-checked: toolbar button and the signature sheet render. Drawing in the sheet and placing it through the desktop driver was not possible (the sheet is a second window the driver could not target), so placement is covered by the unit test that checks the pixels and text.
 
+## M6 thumbnails and page images
+
+- The Pages tab is now a SwiftUI grid instead of PDFKit's thumbnail strip. Click selects and jumps; Shift-click selects a range; Command-click toggles; drag a thumbnail (or the whole selection) to reorder, with a blue insertion line; dropping in the gap below the last page sends it to the end. Right-click: rotate, delete, extract to a new file, export as images, select all.
+- The page commands in the "..." menu (rotate, move earlier/later, delete) act on the selection, or on the page on screen when nothing is selected. Everything goes through the normal undo stack.
+- Export as images: all pages, the selection, or a range; PNG or JPEG; 72/150/300 dpi (capped at 10000 px on the long side); one file per page named `name-001.png` in a chosen folder, never replacing an existing file. Runs as a cancellable job.
+- Hand-checked on a 300-page file: select, navigate and drag-reorder work (dirty mark, undo enabled, selection follows the moved page). Not hand-checked: Shift/Command-click (the desktop driver cannot send modifier clicks), dragging a multi-page selection, the export sheet and folder panel.
+- Not built: the annotation list sidebar (dropped by decision), keyboard shortcuts for the selection (Delete, arrow keys), moving pages between windows.
+
 ## Verification and outstanding work
 
 - Signed, sandbox-enabled Apple Silicon debug build and automated tests pass on the development Mac.

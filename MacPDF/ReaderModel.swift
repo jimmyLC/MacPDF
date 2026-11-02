@@ -26,6 +26,9 @@ final class ReaderModel: NSObject {
     private(set) var isSearching = false
     private(set) var hasSearched = false
     private(set) var currentPage = 0
+    /// Thumbnail selection, zero-based page indices.
+    var selectedPages: Set<Int> = []
+    private var selectionAnchor: Int?
     var pageCount: Int { document?.pageCount ?? 0 }
     private var pending: (PDFDocument, URL, Bool)?
     var sourceURL: URL? { activeURL }
@@ -116,6 +119,7 @@ final class ReaderModel: NSObject {
         pdfView.scrollToTopSoon()
         results = []
         hasSearched = false
+        selectedPages = []; selectionAnchor = nil
         updateFormFlag()
         updatePage()
         NotificationCenter.default.addObserver(self, selector: #selector(foundMatch(_:)), name: .PDFDocumentDidFindMatch, object: candidate)
@@ -173,16 +177,93 @@ final class ReaderModel: NSObject {
         NotificationCenter.default.addObserver(self, selector: #selector(foundMatch(_:)), name: .PDFDocumentDidFindMatch, object: replacement)
         NotificationCenter.default.addObserver(self, selector: #selector(finishedSearch(_:)), name: .PDFDocumentDidEndFind, object: replacement)
         results = []; hasSearched = false
+        selectedPages = selectedPages.filter { $0 < replacement.pageCount }
         updateFormFlag()
         goToPage(min(max(page, 1), replacement.pageCount))
     }
-    func rotateCurrentPage() { edit { try $0.rotate(page: currentPage - 1) } }
-    func deleteCurrentPage() { edit { try $0.delete(page: currentPage - 1) } }
-    func moveCurrentPage(by offset: Int) {
-        let target = currentPage - 1 + offset
-        edit { try $0.move(page: currentPage - 1, to: target) }
-        if target >= 0 && target < pageCount { goToPage(target + 1) }
+    /// The pages page commands act on: the thumbnail selection, or just the page on screen.
+    var targetPages: [Int] {
+        let chosen = selectedPages.filter { $0 >= 0 && $0 < pageCount }.sorted()
+        return chosen.isEmpty ? [max(currentPage - 1, 0)] : chosen
     }
+
+    func selectPage(_ index: Int, extend: Bool, toggle: Bool) {
+        guard index >= 0, index < pageCount else { return }
+        if extend, let anchor = selectionAnchor {
+            selectedPages = Set(min(anchor, index)...max(anchor, index))
+        } else if toggle {
+            if selectedPages.contains(index) { selectedPages.remove(index) } else { selectedPages.insert(index) }
+            selectionAnchor = index
+        } else {
+            selectedPages = [index]; selectionAnchor = index
+        }
+        if !toggle || selectedPages.contains(index) { goToPage(index + 1) }
+    }
+    func selectAllPages() { selectedPages = Set(0..<pageCount) }
+    func clearPageSelection() { selectedPages = []; selectionAnchor = nil }
+
+    func rotateCurrentPage() { let pages = targetPages; edit { try $0.rotate(pages: pages) } }
+    func deleteCurrentPage() {
+        let pages = targetPages
+        edit { try $0.delete(pages: pages) }
+        if error == nil { clearPageSelection() }
+    }
+    func moveCurrentPage(by offset: Int) {
+        let pages = targetPages
+        guard let first = pages.first, let last = pages.last else { return }
+        let destination = offset < 0 ? first - 1 : last + 2
+        guard destination >= 0, destination <= pageCount else { return }
+        movePages(pages, before: destination)
+    }
+    /// Drag and drop and the menu commands both end up here.
+    func movePages(_ pages: [Int], before destination: Int) {
+        var placed: [Int] = []
+        edit { placed = try $0.move(pages: pages, before: destination) }
+        if error == nil, !placed.isEmpty {
+            selectedPages = Set(placed); selectionAnchor = placed.first
+            goToPage(placed[0] + 1)
+        }
+    }
+    func extractSelectedPages(to url: URL) {
+        guard let editor, redaction == nil else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do { try editor.extract(pageList: targetPages, to: url); notice = String(format: L("已擷取 %ld 頁。"), targetPages.count) }
+        catch { self.error = error.localizedDescription }
+    }
+
+    /// Renders the pages to PNG or JPEG files in a folder the user picks.
+    func exportImages(pages: [Int], format: PDFProcessing.ImageFormat, dpi: CGFloat) {
+        guard let document, jobTask == nil, redaction == nil, !pages.isEmpty else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.message = L("選擇存放圖片的資料夾。每張圖片都是新檔，不會覆寫現有檔案。")
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        let base = (sourceURL?.deletingPathExtension().lastPathComponent ?? title.replacingOccurrences(of: ".pdf", with: ""))
+        let width = max(3, String(document.pageCount).count)
+        job = JobProgress(title: L("匯出圖片中"), done: 0, total: pages.count)
+        jobTask = Task { [weak self] in
+            let scoped = folder.startAccessingSecurityScopedResource()
+            defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+            var written = 0, failed = false
+            for (n, index) in pages.enumerated() {
+                guard let self, !Task.isCancelled else { break }
+                self.job?.done = n
+                guard let page = document.page(at: index), let data = PDFProcessing.imageData(of: page, dpi: dpi, format: format) else { failed = true; break }
+                let url = PDFProcessing.imageURL(base: base, number: index + 1, width: width, format: format, in: folder)
+                do { try data.write(to: url, options: .withoutOverwriting); written += 1 }
+                catch { self.error = error.localizedDescription; failed = true; break }
+                await Task.yield()
+            }
+            guard let self else { return }
+            let cancelled = self.jobTask?.isCancelled ?? false
+            self.job = nil; self.jobTask = nil
+            if cancelled { self.notice = String(format: L("已取消，已匯出 %ld 張。"), written) }
+            else if failed && self.error == nil { self.error = L("無法把頁面轉成圖片。") }
+            else if !failed { self.notice = String(format: L("已匯出 %ld 張圖片。"), written) }
+        }
+    }
+
     func undoEdit() { editWithoutHistory { try $0.undo() } }
     func redoEdit() { editWithoutHistory { try $0.redo() } }
     private func editWithoutHistory(_ operation: (PDFEditing) throws -> Void) { edit(operation) }

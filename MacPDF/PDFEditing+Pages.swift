@@ -62,3 +62,65 @@ extension PDFEditing {
         return written
     }
 }
+
+// MARK: Several pages at once
+
+extension PDFEditing {
+    private static func clean(_ pages: [Int], count: Int) throws -> [Int] {
+        let unique = Array(Set(pages)).sorted()
+        guard !unique.isEmpty, unique.allSatisfy({ $0 >= 0 && $0 < count }) else { throw EditError.invalidPage }
+        return unique
+    }
+
+    func rotate(pages: [Int]) throws {
+        try mutate { doc in
+            for index in try Self.clean(pages, count: doc.pageCount) {
+                guard let page = doc.page(at: index) else { throw EditError.invalidPage }
+                page.rotation = (page.rotation + 90) % 360
+            }
+        }
+    }
+
+    func delete(pages: [Int]) throws {
+        try mutate { doc in
+            let doomed = try Self.clean(pages, count: doc.pageCount)
+            guard doomed.count < doc.pageCount else { throw EditError.lastPage }
+            for index in doomed.reversed() { doc.removePage(at: index) }
+        }
+        reparse()
+    }
+
+    /// Moves the pages, keeping their order, so they sit in front of the page that is currently at `destination`
+    /// (`pageCount` means the very end). Returns where the moved pages end up.
+    @discardableResult
+    func move(pages: [Int], before destination: Int) throws -> [Int] {
+        var placed: [Int] = []
+        try mutate { doc in
+            let moving = try Self.clean(pages, count: doc.pageCount)
+            guard destination >= 0, destination <= doc.pageCount else { throw EditError.invalidPage }
+            let objects = moving.compactMap { doc.page(at: $0) }
+            guard objects.count == moving.count else { throw EditError.invalidPage }
+            let target = destination - moving.filter { $0 < destination }.count
+            for index in moving.reversed() { doc.removePage(at: index) }
+            for (offset, page) in objects.enumerated() { doc.insert(page, at: target + offset) }
+            placed = (0..<objects.count).map { target + $0 }
+        }
+        reparse()
+        return placed
+    }
+
+    /// Writes the chosen pages, in document order, as one new file.
+    func extract(pageList: [Int], to url: URL) throws {
+        guard !document.isEncrypted else { throw EditError.encryptedInput }
+        guard !Self.containsSignatureField(document) else { throw EditError.signatureField }
+        let chosen = try Self.clean(pageList, count: document.pageCount)
+        let output = PDFDocument()
+        var start = chosen[0], previous = chosen[0]
+        for index in chosen.dropFirst() + [Int.max] {
+            if index == previous + 1 { previous = index; continue }
+            try Self.copyPages(from: document, range: start..<(previous + 1), into: output)
+            start = index; previous = index
+        }
+        try Self.writeNew(output, to: url)
+    }
+}

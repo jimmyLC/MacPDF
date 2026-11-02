@@ -235,3 +235,46 @@ enum PDFProcessing {
         return page
     }
 }
+
+// MARK: Pages to pictures
+
+extension PDFProcessing {
+    enum ImageFormat: String, CaseIterable, Identifiable {
+        case png, jpeg
+        var id: String { rawValue }
+        var fileExtension: String { self == .png ? "png" : "jpg" }
+    }
+
+    /// Longest side allowed for a rendered page, as docs/05 section 6.2 limits it.
+    static let maximumPixels: CGFloat = 10_000
+
+    @MainActor static func imageData(of page: PDFPage, dpi: CGFloat, format: ImageFormat) -> Data? {
+        let box = page.bounds(for: .cropBox)
+        guard box.width > 0, box.height > 0 else { return nil }
+        let scale = min(dpi / 72, maximumPixels / max(box.width, box.height))
+        guard let rendered = renderImage(of: page, scale: scale, includeAnnotations: true) else { return nil }
+        // Pages have no transparency; flatten onto white so JPEG does not turn black.
+        guard let context = CGContext(data: nil, width: rendered.width, height: rendered.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        let area = CGRect(x: 0, y: 0, width: rendered.width, height: rendered.height)
+        context.setFillColor(CGColor(gray: 1, alpha: 1)); context.fill(area)
+        context.draw(rendered, in: area)
+        guard let flat = context.makeImage() else { return nil }
+        let rep = NSBitmapImageRep(cgImage: flat)
+        switch format {
+        case .png: return rep.representation(using: .png, properties: [:])
+        case .jpeg: return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+        }
+    }
+
+    /// `base-001.png`, then `base-001 2.png` if that exists. Files are only ever created, never replaced.
+    static func imageURL(base: String, number: Int, width: Int, format: ImageFormat, in folder: URL) -> URL {
+        let stem = "\(base)-" + String(format: "%0\(width)d", number)
+        var url = folder.appendingPathComponent(stem + "." + format.fileExtension)
+        var counter = 2
+        while FileManager.default.fileExists(atPath: url.path) && counter < 1000 {
+            url = folder.appendingPathComponent("\(stem) \(counter).\(format.fileExtension)"); counter += 1
+        }
+        return url
+    }
+}

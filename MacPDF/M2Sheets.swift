@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum M2Sheet: String, Identifiable {
-    case metadata, encrypt, compress, signature
+    case metadata, encrypt, compress, signature, exportImages
     var id: String { rawValue }
 }
 
@@ -249,5 +249,53 @@ struct SignatureSheet: View {
                 }
             }
         }
+    }
+}
+
+struct ExportImagesSheet: View {
+    let model: ReaderModel
+    let close: () -> Void
+    enum Scope: String, Identifiable { case all, selected, range; var id: String { rawValue } }
+    @State private var scope = Scope.all
+    @State private var range = ""
+    @State private var format = PDFProcessing.ImageFormat.png
+    @State private var dpi = 150
+
+    private var pages: [Int]? {
+        switch scope {
+        case .all: return Array(0..<model.pageCount)
+        case .selected: return model.targetPages
+        case .range:
+            guard let ranges = try? PDFEditing.parseRanges(range, pageCount: model.pageCount) else { return nil }
+            return ranges.flatMap { $0.map { $0 - 1 } }
+        }
+    }
+
+    var body: some View {
+        SheetFrame(title: "匯出為圖片", symbol: "photo.on.rectangle") {
+            Picker("頁面", selection: $scope) {
+                Text("全部").tag(Scope.all)
+                if !model.selectedPages.isEmpty { Text("選取的頁面").tag(Scope.selected) }
+                Text("範圍").tag(Scope.range)
+            }.pickerStyle(.segmented)
+            if scope == .range { TextField("例如 1-3, 5", text: $range).textFieldStyle(.roundedBorder) }
+            Picker("格式", selection: $format) { Text("PNG（無損）").tag(PDFProcessing.ImageFormat.png); Text("JPEG（較小）").tag(PDFProcessing.ImageFormat.jpeg) }
+                .pickerStyle(.segmented)
+            Picker("解析度", selection: $dpi) { Text("72 dpi（螢幕）").tag(72); Text("150 dpi").tag(150); Text("300 dpi（列印）").tag(300) }
+                .pickerStyle(.segmented)
+            Text("每頁存成一張圖片，檔名像「檔名-001.png」。已有同名檔案時會加編號，不會覆寫。單邊最多 10000 像素。").font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+                Button("選擇資料夾並匯出…") {
+                    guard let chosen = pages else { return }
+                    let (kind, resolution) = (format, CGFloat(dpi))
+                    close()
+                    DispatchQueue.main.async { model.exportImages(pages: chosen, format: kind, dpi: resolution) }
+                }
+                .keyboardShortcut(.defaultAction).prominentGlassButton().disabled(pages?.isEmpty ?? true)
+            }
+        }
+        .onAppear { if !model.selectedPages.isEmpty { scope = .selected } }
     }
 }

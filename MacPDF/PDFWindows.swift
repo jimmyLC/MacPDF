@@ -12,6 +12,13 @@ import SwiftUI
         super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(closed(_:)), name: NSWindow.willCloseNotification, object: nil)
     }
+    /// The model of the key document window, for menu-bar commands.
+    var keyModel: ReaderModel? {
+        let controller = controllers.first { $0.window?.isKeyWindow == true }
+            ?? controllers.first { $0.window?.isMainWindow == true }
+            ?? controllers.last { $0.window?.isVisible == true }
+        return controller.flatMap { models[ObjectIdentifier($0)] }
+    }
     func showWelcomeIfNeeded() {
         if controllers.isEmpty { _ = createWindow() }
     }

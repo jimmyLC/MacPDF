@@ -16,6 +16,11 @@ final class PDFEditing {
 
     init(document: PDFDocument, dirty: Bool = false) { self.document = document; self.dirty = dirty }
     func markDiscarded() { dirty = false }
+    func markDirty() { dirty = true }
+    /// Pages spliced in from another document keep that document's page labels; a round trip resets them.
+    func reparse() {
+        if let data = document.dataRepresentation(), let fresh = PDFDocument(data: data) { document = fresh }
+    }
 
     enum EditError: LocalizedError {
         case cannotSerialize, historyTooLarge, signatureField, invalidPage, lastPage, noSelection, encryptedInput, outputExists, writeFailed(String)
@@ -34,12 +39,12 @@ final class PDFEditing {
         }
     }
 
-    private static func containsSignatureField(_ doc: PDFDocument) -> Bool {
+    static func containsSignatureField(_ doc: PDFDocument) -> Bool {
         (0..<doc.pageCount).contains { index in
             doc.page(at: index)?.annotations.contains(where: { $0.widgetFieldType == .signature }) == true
         }
     }
-    private func mutate(_ action: (PDFDocument) throws -> Void) throws {
+    func mutate(_ action: (PDFDocument) throws -> Void) throws {
         guard !document.isEncrypted else { throw EditError.encryptedInput }
         guard !Self.containsSignatureField(document) else { throw EditError.signatureField }
         guard let before = document.dataRepresentation(), let working = PDFDocument(data: before) else { throw EditError.cannotSerialize }
@@ -83,7 +88,7 @@ final class PDFEditing {
 
     /// PDFKit page copies keep destinations tied to the source document.
     /// Rebind each local destination after all target pages have been inserted.
-    private static func copyPages(from source: PDFDocument, range: Range<Int>, into target: PDFDocument) throws {
+    static func copyPages(from source: PDFDocument, range: Range<Int>, into target: PDFDocument) throws {
         var mapping: [Int: PDFPage] = [:]
         for index in range {
             guard let original = source.page(at: index), let copy = original.copy() as? PDFPage else { throw EditError.cannotSerialize }
@@ -192,8 +197,12 @@ final class PDFEditing {
         try Self.writeNew(document, to: url)
         dirty = false
     }
-    private static func writeNew(_ document: PDFDocument, to url: URL) throws {
-        guard let data = document.dataRepresentation(), PDFDocument(data: data) != nil else { throw EditError.cannotSerialize }
+    static func writeNew(_ document: PDFDocument, to url: URL) throws {
+        guard let data = document.dataRepresentation() else { throw EditError.cannotSerialize }
+        try writeNew(data: data, to: url)
+    }
+    static func writeNew(data: Data, to url: URL) throws {
+        guard PDFDocument(data: data) != nil else { throw EditError.cannotSerialize }
         // The final name is created exclusively only after the full PDF is flushed.
         // For another volume, request an item-replacement directory on that volume.
         func stage(in directory: URL) throws -> URL {

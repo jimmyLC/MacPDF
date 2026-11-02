@@ -52,6 +52,17 @@ struct ReaderCommands: Commands {
                 if panel.runModal() == .OK { PDFWindows.shared.open(panel.urls) }
             }.keyboardShortcut("o")
         }
+        CommandMenu("文件") {
+            Button("文字辨識（OCR）") { PDFWindows.shared.keyModel?.runOCR() }
+            Button("壓縮…") { PDFWindows.shared.keyModel?.sheet = .compress }
+            Divider()
+            Button("清除表單欄位") { PDFWindows.shared.keyModel?.resetForm() }
+            Button("扁平化表單") { PDFWindows.shared.keyModel?.flattenForms() }
+            Divider()
+            Button("編輯文件資訊…") { PDFWindows.shared.keyModel?.sheet = .metadata }
+            Button("儲存加密副本…") { PDFWindows.shared.keyModel?.sheet = .encrypt }
+            Button("儲存無密碼副本…") { PDFWindows.shared.keyModel?.exportUnlockedCopy() }
+        }
     }
 }
 

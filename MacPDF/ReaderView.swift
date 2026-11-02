@@ -9,8 +9,9 @@ struct ReaderView: View {
         _model = State(initialValue: model)
         self.openInNewWindow = openInNewWindow
     }
-    @State private var choosing = false
-    @State private var choosingMerge = false
+    enum ImportMode { case open, merge, images }
+    @State private var importMode = ImportMode.open
+    @State private var showImporter = false
     @State private var annotationText = ""
     @State private var annotationFreeText = false
     @State private var showingAnnotation = false
@@ -31,24 +32,35 @@ struct ReaderView: View {
     var body: some View {
         ZStack {
             AmbientBackground()
-            if model.document != nil { documentLayer } else { WelcomeView(model: model) { choosing = true } }
+            if model.document != nil { documentLayer } else { WelcomeView(model: model) { present(.open) } }
         }
         .overlay { if dropTargeted { dropOverlay } }
         .ignoresSafeArea()
         .background(WindowCloseGuard(model: model))
         .frame(minWidth: 780, minHeight: 520)
         .navigationTitle(model.title + (model.isDirty ? " •" : ""))
-        .fileImporter(isPresented: $choosing, allowedContentTypes: [.pdf]) { result in
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: importMode == .images ? [.image] : [.pdf], allowsMultipleSelection: true) { result in
             switch result {
-            case .success(let url): openDocument(url)
+            case .success(let urls):
+                switch importMode {
+                case .open: urls.forEach { openDocument($0) }
+                case .merge: urls.forEach { model.appendPDF($0) }
+                case .images: model.appendImages(urls)
+                }
             case .failure(let error): model.error = error.localizedDescription
             }
         }
-        .fileImporter(isPresented: $choosingMerge, allowedContentTypes: [.pdf]) { result in
-            switch result {
-            case .success(let url): model.appendPDF(url)
-            case .failure(let error): model.error = error.localizedDescription
+        .sheet(item: Binding(get: { model.sheet }, set: { model.sheet = $0 })) { which in
+            switch which {
+            case .metadata: MetadataSheet(model: model) { model.sheet = nil }
+            case .encrypt: EncryptSheet(model: model) { model.sheet = nil }
+            case .compress: CompressSheet(model: model) { model.sheet = nil }
             }
+        }
+        .task(id: model.notice) {
+            guard model.notice != nil else { return }
+            try? await Task.sleep(for: .seconds(5))
+            model.notice = nil
         }
         .alert("刪除頁面？", isPresented: $confirmDelete) {
             Button("刪除", role: .destructive) { model.deleteCurrentPage() }
@@ -97,10 +109,18 @@ struct ReaderView: View {
                 }
             }
             topBar
-            if model.isPlacingAnnotation { placementBanner.padding(.top, barTop + barHeight + 12).transition(.move(edge: .top).combined(with: .opacity)) }
+            VStack(spacing: 8) {
+                if model.isPlacingAnnotation { placementBanner }
+                if let job = model.job { jobBanner(job) }
+                else if let notice = model.notice { noticeBanner(notice) }
+            }
+            .padding(.top, barTop + barHeight + 12)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
         .animation(.smooth(duration: 0.28), value: sidebar)
         .animation(.smooth(duration: 0.25), value: model.isPlacingAnnotation)
+        .animation(.smooth(duration: 0.25), value: model.job != nil)
+        .animation(.smooth(duration: 0.25), value: model.notice)
     }
 
     private var dropOverlay: some View {
@@ -156,17 +176,35 @@ struct ReaderView: View {
     }
 
     private var moreMenu: some View {
-        Menu {
-            Button("順時針旋轉這一頁") { model.rotateCurrentPage() }
-            Button("向前移動這一頁") { model.moveCurrentPage(by: -1) }.disabled(model.currentPage <= 1)
-            Button("向後移動這一頁") { model.moveCurrentPage(by: 1) }.disabled(model.currentPage >= model.pageCount)
-            Button("刪除這一頁", role: .destructive) { confirmDelete = true }.disabled(model.pageCount <= 1)
+        let busy = model.job != nil
+        return Menu {
+            Menu("頁面", systemImage: "doc.on.doc") {
+                Button("順時針旋轉這一頁") { model.rotateCurrentPage() }
+                Button("向前移動這一頁") { model.moveCurrentPage(by: -1) }.disabled(model.currentPage <= 1)
+                Button("向後移動這一頁") { model.moveCurrentPage(by: 1) }.disabled(model.currentPage >= model.pageCount)
+                Button("刪除這一頁", role: .destructive) { confirmDelete = true }.disabled(model.pageCount <= 1)
+            }.disabled(busy)
+            Menu("插入與擷取", systemImage: "plus.rectangle.on.rectangle") {
+                Button("合併 PDF 到最後…") { present(.merge) }
+                Button("從圖片新增頁面…") { present(.images) }
+                Button("擷取頁面／分割…") { extractPages() }
+            }.disabled(busy)
+            Menu("掃描頁面", systemImage: "text.viewfinder") {
+                Button("文字辨識（OCR）") { model.runOCR() }
+                Button("壓縮…") { model.sheet = .compress }
+            }.disabled(busy)
+            Menu("表單", systemImage: "list.bullet.rectangle") {
+                Button("清除表單欄位") { model.resetForm() }
+                Button("扁平化表單") { model.flattenForms() }
+            }.disabled(busy || !model.hasFormFields)
+            Menu("文件資訊與保護", systemImage: "lock.shield") {
+                Button("編輯文件資訊…") { model.sheet = .metadata }
+                Button("儲存加密副本…") { model.sheet = .encrypt }
+                Button("儲存無密碼副本…") { model.exportUnlockedCopy() }.disabled(!(model.document?.isEncrypted ?? false))
+            }.disabled(busy)
             Divider()
-            Button("合併 PDF 到最後…") { choosingMerge = true }
-            Button("擷取頁面／分割…") { extractPages() }
-            Divider()
-            Button("復原") { model.undoEdit() }.keyboardShortcut("z").disabled(!model.canUndo)
-            Button("重做") { model.redoEdit() }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!model.canRedo)
+            Button("復原") { model.undoEdit() }.keyboardShortcut("z").disabled(!model.canUndo || busy)
+            Button("重做") { model.redoEdit() }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!model.canRedo || busy)
             Button("另存新檔…") { saveCopy() }.keyboardShortcut("s")
             Button("列印…") { model.printDocument() }.keyboardShortcut("p")
         } label: {
@@ -220,7 +258,30 @@ struct ReaderView: View {
         .glassSurface(in: Capsule())
     }
 
+    private func jobBanner(_ job: JobProgress) -> some View {
+        HStack(spacing: 12) {
+            ProgressView(value: Double(job.done), total: Double(max(job.total, 1))).frame(width: 110)
+            Text("\(job.title) \(job.done) / \(job.total)").font(.system(size: 13, weight: .medium)).monospacedDigit()
+            Button("取消") { model.cancelJob() }.controlSize(.small)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 9)
+        .glassSurface(in: Capsule())
+    }
+
+    private func noticeBanner(_ text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
+            Text(text).font(.system(size: 13, weight: .medium)).lineLimit(2)
+            Button { model.notice = nil } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 9)
+        .glassSurface(in: Capsule())
+    }
+
     // MARK: Actions
+
+    private func present(_ mode: ImportMode) { importMode = mode; showImporter = true }
 
     private func extractPages() {
         let alert = NSAlert()

@@ -3,6 +3,8 @@ import PDFKit
 import UniformTypeIdentifiers
 import Observation
 
+struct JobProgress { var title: String; var done: Int; var total: Int }
+
 @MainActor @Observable
 final class ReaderModel: NSObject {
     let pdfView: ReaderPDFView
@@ -31,6 +33,12 @@ final class ReaderModel: NSObject {
     private var recoveryID = UUID()
     private let recovery = RecoveryStore()
     private(set) var recoveryEntries: [RecoveryEntry] = []
+    private(set) var job: JobProgress?
+    private(set) var hasFormFields = false
+    var notice: String?
+    var sheet: M2Sheet?
+    private var jobTask: Task<Void, Never>?
+    private var formSnapshotTask: Task<Void, Never>?
 
     var title: String { displayName ?? activeURL?.lastPathComponent ?? "MacPDF" }
 
@@ -49,6 +57,7 @@ final class ReaderModel: NSObject {
         pdfView.displayMode = .singlePageContinuous
         pdfView.displayDirection = .vertical
         NotificationCenter.default.addObserver(self, selector: #selector(pageChanged(_:)), name: .PDFViewPageChanged, object: pdfView)
+        NotificationCenter.default.addObserver(self, selector: #selector(annotationHit(_:)), name: .PDFViewAnnotationHit, object: pdfView)
         loadRecents()
         recoveryEntries = recovery.entries()
     }
@@ -102,6 +111,7 @@ final class ReaderModel: NSObject {
         pdfView.scrollToTopSoon()
         results = []
         hasSearched = false
+        updateFormFlag()
         updatePage()
         NotificationCenter.default.addObserver(self, selector: #selector(foundMatch(_:)), name: .PDFDocumentDidFindMatch, object: candidate)
         NotificationCenter.default.addObserver(self, selector: #selector(finishedSearch(_:)), name: .PDFDocumentDidEndFind, object: candidate)
@@ -137,11 +147,18 @@ final class ReaderModel: NSObject {
             try operation(editor)
             replaceDisplayedDocument(editor.document, page: oldPage)
             revision += 1
-            if let data = editor.document.dataRepresentation() {
-                do { try recovery.save(id: recoveryID, title: title, data: data); recoveryEntries = recovery.entries() }
-                catch { self.error = String(format: L("修改已套用，但無法建立恢復檔：%@"), error.localizedDescription) }
-            } else { self.error = L("修改已套用，但無法建立恢復檔。") }
+            saveRecoverySnapshot()
         } catch { self.error = error.localizedDescription }
+    }
+    private func saveRecoverySnapshot() {
+        guard let editor else { return }
+        if let data = editor.document.dataRepresentation() {
+            do { try recovery.save(id: recoveryID, title: title, data: data); recoveryEntries = recovery.entries() }
+            catch { self.error = String(format: L("修改已套用，但無法建立恢復檔：%@"), error.localizedDescription) }
+        } else { self.error = L("修改已套用，但無法建立恢復檔。") }
+    }
+    private func updateFormFlag() {
+        hasFormFields = document.map { !PDFEditing.widgets(in: $0).isEmpty } ?? false
     }
     private func replaceDisplayedDocument(_ replacement: PDFDocument, page: Int) {
         cancelSearch()
@@ -151,6 +168,7 @@ final class ReaderModel: NSObject {
         NotificationCenter.default.addObserver(self, selector: #selector(foundMatch(_:)), name: .PDFDocumentDidFindMatch, object: replacement)
         NotificationCenter.default.addObserver(self, selector: #selector(finishedSearch(_:)), name: .PDFDocumentDidEndFind, object: replacement)
         results = []; hasSearched = false
+        updateFormFlag()
         goToPage(min(max(page, 1), replacement.pageCount))
     }
     func rotateCurrentPage() { edit { try $0.rotate(page: currentPage - 1) } }
@@ -286,6 +304,143 @@ final class ReaderModel: NSObject {
     }
 
     func openRecent(_ url: URL) { open(url) }
+
+    // MARK: M2
+
+    @objc private func annotationHit(_ notification: Notification) {
+        guard let annotation = notification.userInfo?["PDFAnnotationHit"] as? PDFAnnotation, annotation.type == "Widget",
+              let editor, !editor.document.isEncrypted else { return }
+        // Form values live in the displayed document; track them so close/quit and recovery know.
+        editor.markDirty(); revision += 1
+        formSnapshotTask?.cancel()
+        formSnapshotTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            if !Task.isCancelled { self?.saveRecoverySnapshot() }
+        }
+    }
+
+    func cancelJob() { jobTask?.cancel() }
+
+    /// PDFView runs its own on-screen text recognition, which makes `page.string` report text that is not
+    /// in the file. Ask a detached copy instead, so only text that would be saved counts.
+    private func pagesWithoutEmbeddedText() -> [Int] {
+        guard let data = document?.dataRepresentation(), let probe = PDFDocument(data: data) else { return [] }
+        return (0..<probe.pageCount).filter { index in probe.page(at: index).map { !PDFProcessing.hasText($0) } ?? false }
+    }
+
+    func runOCR() {
+        guard let document, jobTask == nil else { return }
+        let candidates = pagesWithoutEmbeddedText().filter { document.page(at: $0)?.rotation == 0 }
+        guard !candidates.isEmpty else { notice = L("沒有需要辨識的頁面（已有文字，或是旋轉過的頁面）。"); return }
+        let start = revision
+        job = JobProgress(title: L("文字辨識中"), done: 0, total: candidates.count)
+        jobTask = Task { [weak self] in
+            var results: [Int: PDFPage] = [:]
+            for (n, index) in candidates.enumerated() {
+                guard let self, !Task.isCancelled else { break }
+                self.job?.done = n
+                guard let page = self.document?.page(at: index),
+                      let image = PDFProcessing.renderImage(of: page, scale: PDFProcessing.ocrScale) else { continue }
+                let lines = (try? await Task.detached(priority: .userInitiated) { try PDFProcessing.recognize(image) }.value) ?? []
+                guard !lines.isEmpty, let rebuilt = PDFProcessing.searchablePage(from: page, lines: lines) else { continue }
+                results[index] = rebuilt
+            }
+            self?.finishPageJob(results: results, startRevision: start, cancelledMessage: L("已取消文字辨識。"),
+                                emptyMessage: L("沒有辨識到文字。")) { count in String(format: L("已辨識 %ld 頁，現在可以搜尋與選取文字。"), count) }
+        }
+    }
+
+    func compress(_ preset: PDFProcessing.Preset) {
+        guard let document, jobTask == nil else { return }
+        let candidates = (0..<document.pageCount).filter { document.page(at: $0).map { PDFProcessing.isImageDominant($0) } ?? false }
+        guard !candidates.isEmpty else { notice = L("沒有可壓縮的掃描頁面。"); return }
+        let start = revision
+        let before = document.dataRepresentation()?.count ?? 0
+        job = JobProgress(title: L("壓縮中"), done: 0, total: candidates.count)
+        jobTask = Task { [weak self] in
+            var results: [Int: PDFPage] = [:]
+            for (n, index) in candidates.enumerated() {
+                guard let self, !Task.isCancelled else { break }
+                self.job?.done = n
+                if let page = self.document?.page(at: index), let rebuilt = PDFProcessing.compressedPage(from: page, preset: preset) { results[index] = rebuilt }
+                await Task.yield()
+            }
+            self?.finishPageJob(results: results, startRevision: start, cancelledMessage: L("已取消壓縮。"),
+                                emptyMessage: L("無法壓縮這些頁面。")) { [weak self] count in
+                let after = self?.editor?.document.dataRepresentation()?.count ?? before
+                if after >= before {
+                    self?.undoEdit()
+                    return L("壓縮後檔案沒有變小，已還原。")
+                }
+                let formatter = ByteCountFormatter(); formatter.countStyle = .file
+                return String(format: L("已壓縮 %ld 頁：%@ → %@"), count, formatter.string(fromByteCount: Int64(before)), formatter.string(fromByteCount: Int64(after)))
+            }
+        }
+    }
+
+    private func finishPageJob(results: [Int: PDFPage], startRevision: Int, cancelledMessage: String, emptyMessage: String,
+                               success: (Int) -> String) {
+        let cancelled = jobTask?.isCancelled ?? false
+        job = nil; jobTask = nil
+        guard !cancelled else { notice = cancelledMessage; return }
+        guard revision == startRevision else { notice = L("文件在處理期間已變更，結果未套用。"); return }
+        guard !results.isEmpty else { notice = emptyMessage; return }
+        edit { try $0.replace(pages: results) }
+        if error == nil { notice = success(results.count) }
+    }
+
+    func resetForm() { edit { try $0.resetFormFields() }; if error == nil { notice = L("已清除表單欄位。") } }
+    func flattenForms() { edit { try $0.flattenForms() }; if error == nil { notice = L("表單已烙入頁面，無法再填寫。可以復原。") } }
+
+    var metadata: [String: String] {
+        guard let attributes = document?.documentAttributes else { return [:] }
+        func text(_ key: PDFDocumentAttribute) -> String {
+            if let value = attributes[key] as? String { return value }
+            if let values = attributes[key] as? [String] { return values.joined(separator: ", ") }
+            return ""
+        }
+        return ["title": text(.titleAttribute), "author": text(.authorAttribute), "subject": text(.subjectAttribute), "keywords": text(.keywordsAttribute)]
+    }
+    func setMetadata(title: String, author: String, subject: String, keywords: String) {
+        var values: [PDFDocumentAttribute: Any] = [:]
+        if !title.isEmpty { values[.titleAttribute] = title }
+        if !author.isEmpty { values[.authorAttribute] = author }
+        if !subject.isEmpty { values[.subjectAttribute] = subject }
+        let words = keywords.split(whereSeparator: { ",，;；".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        if !words.isEmpty { values[.keywordsAttribute] = words }
+        edit { try $0.setMetadata(values) }
+    }
+
+    func appendImages(_ urls: [URL]) {
+        let scoped = urls.map { ($0, $0.startAccessingSecurityScopedResource()) }
+        defer { scoped.forEach { if $0.1 { $0.0.stopAccessingSecurityScopedResource() } } }
+        edit { try $0.appendImages(urls) }
+        if error == nil { notice = String(format: L("已新增 %ld 張圖片為頁面。"), urls.count) }
+    }
+
+    func exportEncryptedCopy(userPassword: String, ownerPassword: String, permissions: PDFEditing.Permissions) {
+        guard let editor, let url = choosePDFDestination(suggested: "MacPDF-加密.pdf") else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do { try editor.exportEncrypted(to: url, userPassword: userPassword, ownerPassword: ownerPassword, permissions: permissions); notice = L("已儲存加密副本。") }
+        catch { self.error = error.localizedDescription }
+    }
+
+    func exportUnlockedCopy() {
+        guard let editor, let url = choosePDFDestination(suggested: "MacPDF-無密碼.pdf") else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do { try editor.exportUnlocked(to: url); notice = L("已儲存無密碼副本。") }
+        catch { self.error = error.localizedDescription }
+    }
+
+    private func choosePDFDestination(suggested: String) -> URL? {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = suggested
+        panel.message = L("請選擇新的檔名；MacPDF 不會覆寫現有檔案。")
+        return panel.runModal() == .OK ? panel.url : nil
+    }
 
     private func loadRecents() {
         let entries = UserDefaults.standard.array(forKey: recentKey) as? [Data] ?? []

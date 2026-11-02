@@ -17,7 +17,7 @@ Updated: 2026-11-02 (Asia/Singapore). M1 is an internal candidate; acceptance is
 
 - M3 manual redaction (rasterize, with verification before save) is merged to main; see `docs/11-implementation-plan.md`.
 
-- M4 compare two PDFs (text diff, side by side) is on branch `m4-compare`; see `docs/11-implementation-plan.md`. Batch workflows are not built yet.
+- M4 compare two PDFs (text diff, side by side) is on branch `m4-compare`; see `docs/11-implementation-plan.md`. A basic batch window (OCR, flatten, compress over many files) is there too.
 
 ## Verification
 

@@ -51,6 +51,13 @@ File > Compare two PDFs… opens two files side by side (the earlier-modified on
 - Text only: no visual (pixel) diff, no formatting diff, no ignore-header/footer filter, no exported report. A side with almost no stored text (a scan) shows a warning to run OCR first.
 - Tested with `Tests/M4Tests.swift` (7 tests) and by hand in a debug build (`MACPDF_COMPARE=old.pdf:new.pdf`, together with both files passed to `open`, because the sandbox only grants those files).
 
+## M4 batch implementation and limitations
+
+File > Batch process… takes many PDFs (picker or drag), a set of steps (OCR, flatten forms, compress scans; run in that order) and an output folder, and writes each result as `name-批次.pdf` (a number is added if that exists; nothing is overwritten). Encrypted and signed files are skipped and reported per file; one failure does not stop the rest; the run can be cancelled.
+
+- Not built: saved reusable flows, step reordering, split/merge/rotate/watermark/redact/find-replace steps, a 500-file limit check, running without the window open.
+- Tested by `Tests/BatchTests.swift` (5 tests: OCR, OCR+compress, refusal of encrypted input, non-colliding names, start rules). The window layout was checked by hand; a full run through the file panels was not driven by hand.
+
 ## Verification and outstanding work
 
 - Signed, sandbox-enabled Apple Silicon debug build and automated tests pass on the development Mac.

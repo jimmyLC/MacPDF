@@ -206,3 +206,23 @@
 "舊版第 %ld 頁 → 新版第 %ld 頁" = "Old page %ld → new page %ld";
 "舊版第 %ld 頁" = "Old page %ld";
 "新版第 %ld 頁" = "New page %ld";
+
+/* M4 batch */
+"批次處理" = "Batch process";
+"批次處理…" = "Batch process…";
+"檔案（%ld）" = "Files (%ld)";
+"加入 PDF…" = "Add PDFs…";
+"拖曳 PDF 到這裡" = "Drop PDFs here";
+"移除" = "Remove";
+"要做的事" = "Steps";
+"依序進行：辨識 → 扁平化 → 壓縮。加密或有簽章的檔案會跳過。" = "Runs in order: recognise → flatten → compress. Encrypted or signed files are skipped.";
+"輸出資料夾" = "Output folder";
+"尚未選擇" = "Not chosen";
+"選擇資料夾…" = "Choose folder…";
+"每個結果存成「檔名-批次.pdf」，已有同名檔案時會加上編號，不會覆寫。" = "Each result is saved as “name-批次.pdf”; if that exists a number is added. Nothing is overwritten.";
+"開始" = "Start";
+"再執行一次" = "Run again";
+"無法讀取" = "Could not read";
+"已取消" = "Cancelled";
+"選擇要批次處理的 PDF。" = "Choose the PDFs to process.";
+"選擇輸出資料夾。結果會存成新檔，不會覆寫任何檔案。" = "Choose the output folder. Results are saved as new files; nothing is overwritten.";

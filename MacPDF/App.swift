@@ -69,6 +69,7 @@ struct ReaderCommands: Commands {
                 if panel.runModal() == .OK { PDFWindows.shared.open(panel.urls) }
             }.keyboardShortcut("o")
             Button("比較兩份 PDF…") { PDFWindows.shared.chooseAndCompare() }
+            Button("批次處理…") { PDFWindows.shared.openBatch() }
         }
         CommandMenu("文件") {
             Button("文字辨識（OCR）") { PDFWindows.shared.keyModel?.runOCR() }

@@ -57,6 +57,21 @@ import SwiftUI
         compare(old: dated[0], new: dated[1])
     }
 
+    func openBatch() {
+        let model = BatchModel()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 600), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.title = L("批次處理")
+        window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.minSize = NSSize(width: 780, height: 480)
+        window.contentViewController = NSHostingController(rootView: BatchView(model: model))
+        window.setContentSize(NSSize(width: 900, height: 600))
+        let controller = NSWindowController(window: window)
+        compareControllers.append(controller)
+        window.center()
+        controller.showWindow(nil)
+    }
+
     func compare(old: URL, new: URL) {
         let model = CompareModel()
         let scoped = [old, new].map { ($0, $0.startAccessingSecurityScopedResource()) }

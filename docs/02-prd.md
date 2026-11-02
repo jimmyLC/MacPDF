@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 版本 | 0.2（Draft） |
+| 版本 | 0.3（Draft） |
 | 日期 | 2026-11-02 |
 | 狀態 | 待確認 |
 | 產品類型 | macOS 原生、本機優先的 PDF 工作台 |
@@ -10,6 +10,8 @@
 | 技術基底 | Swift 6 + SwiftUI + PDFKit + Vision + CoreGraphics |
 
 > **v0.2 修訂**：補齊 v0.1 漏列或寫得不夠明確的項目，包括連結管理、書籤編輯、擷取內嵌圖片、獨立 Flatten 工具、物件框選／層級、字型選擇器、OCR 文字層顯示模式、建立 PDF、表單 Tab 順序編輯、塗黑樣式預設、Flows 的 Flatten 步驟、Dock 選單、主題風格、大檔模式與首次啟動引導。
+>
+> **v0.3 修訂**：對照 RevPDF 官網 Features / What's New / Mac 頁，補上 **PDF/A-2a（G18）**、**自訂分割線位置（B12）**、**頁首頁尾文件資訊 token（J3）**、**Page X of Y（J4）**、**塗黑外觀控制（I21）**、**掃描邊緣偵測/透視校正（F4/F18）**、**缺字型下載（O13）**、**Replace All（E9）**、**WYSIWYG 控制（E24）**、**額外語言（Q9）**；新增 6.4 官網功能對照。
 
 ---
 
@@ -163,7 +165,7 @@
 | B9 | 依範圍分割 | 1-3, 5, 8-10 | P0 | 低 |
 | B10 | 每頁分割 | 一頁一檔 | P0 | 低 |
 | B11 | 依大小分割 | 指定最大 MB | P1 | 中 |
-| B12 | 中間分割 | 水平／垂直對半 | P1 | 低 |
+| B12 | 分割線分割 | 水平／垂直；可拖曳分割線到中間或自訂位置 | P1 | 低 |
 | B13 | 裁切頁面 | 設定 crop box、預覽 | P1 | 中 |
 | B14 | 調整頁面尺寸 | A4／Letter／自訂、縮放內容 | P1 | 中 |
 | B15 | 頁碼／Bates | 起始頁、格式、前綴 | P1 | 中 |
@@ -202,7 +204,7 @@
 
 | ID | 功能 | 說明 | 優先級 | 難度 |
 |---|---|---|---|---|
-| D1 | 偵測表單欄位 | 自動辨識 AcroForm | P0 | 低 |
+| D1 | 偵測表單欄位 | 自動辨識 AcroForm；平面表單可用啟發式輔助（P2） | P0 | 低 |
 | D2 | 填寫文字欄位 | 單行／多行、字型、對齊 | P0 | 低 |
 | D3 | 核取方塊／单选钮 | 勾選、群組 | P0 | 低 |
 | D4 | 下拉選單／清單 | 選項選擇 | P0 | 低 |
@@ -233,7 +235,7 @@
 | E6 | 表格編輯 | 儲存格選取、合併、拆分、欄寬 | P2 | 極高 |
 | E7 | 插入文字方塊 | 新文字區塊 | P0 | 中 |
 | E8 | 刪除文字 | 移除選取文字 | P2 | 高 |
-| E9 | 尋找與取代 | 全文件、預覽、逐筆確認 | P1 | 高 |
+| E9 | 尋找與取代 | 全文件、預覽、逐筆確認、全部取代（Replace All） | P1 | 高 |
 | E10 | 替換字型 | 嵌入／子集化 | P2 | 高 |
 | E11 | 編輯圖片 | 移動、縮放、旋轉、裁切、取代、透明度、圖層順序 | P1 | 中 |
 | E12 | 新增／刪除圖片 | 從檔案、剪貼簿 | P1 | 中 |
@@ -248,6 +250,7 @@
 | E21 | 物件層級 | 上移／下移／最上層／最下層 | P2 | 中 |
 | E22 | 格線／貼齊／對齊分佈 | 顯示格線、吸附、等距分佈 | P2 | 中 |
 | E23 | 物件鎖定 | 鎖定位置避免誤移 | P3 | 低 |
+| E24 | WYSIWYG 直接操作 | 拖曳邊界、即時預覽、所見即所得的文字/版面控制 | P2 | 中 |
 
 **建議**：第一版只做 E7（插入文字方塊）與 E11（圖片編輯），E2～E6 等真正有需求再做。
 
@@ -258,7 +261,7 @@
 | F1 | 匯入圖片為頁面 | PNG／JPEG／TIFF、多選、排序 | P0 | 低 |
 | F2 | 相機掃描 | Continuity Camera／ImageCaptureCore | P1 | 中 |
 | F3 | 平台掃描器 | ImageCaptureCore | P2 | 中 |
-| F4 | 影像編輯 | 裁切、旋轉、拉直、對比、黑白、去背 | P1 | 中 |
+| F4 | 影像編輯 | 裁切、旋轉、拉直、透視校正、邊緣偵測、對比、黑白、去背 | P1 | 中 |
 | F5 | OCR 單頁 | Vision、語言選擇 | P0 | 中 |
 | F6 | OCR 全文件 | 進度、取消、錯誤頁 | P0 | 中 |
 | F7 | OCR 語言 | 英文、繁中、簡中、日文、韓文等 Vision 支援語言 | P0 | 低 |
@@ -272,6 +275,7 @@
 | F15 | OCR 文字層顯示模式 | 隱藏／可見／僅選取時顯示 | P1 | 低 |
 | F16 | OCR 頁面範圍 | 全部、目前頁、指定頁碼 | P0 | 低 |
 | F17 | 重新 OCR／清除快取 | 辨識錯誤時重跑、清掉舊結果 | P1 | 低 |
+| F18 | 文件邊緣偵測／透視校正 | 掃描時自動找紙張邊緣、校正梯形變形（Continuity Camera） | P1 | 中 |
 
 ### 5.7 G. 轉換與輸出
 
@@ -284,7 +288,7 @@
 | G5 | PDF → DOCX | 版面重建、表格、圖片 | P2 | 極高 |
 | G6 | PDF → XLSX | 表格偵測、只匯表格／整頁 | P2 | 極高 |
 | G7 | PDF → PPTX | 每頁一張投影片 | P3 | 高 |
-| G8 | PDF/A | PDF/A-1b／2b／3 | P1 | 高 |
+| G8 | PDF/A（基礎） | PDF/A-1b／2b／3b；字型嵌入、ICC、XMP、清理 JS/附件 | P1 | 高 |
 | G9 | PDF/X | 印刷用 | P3 | 高 |
 | G10 | HTML → PDF | WebKit 列印 | P2 | 中 |
 | G11 | Office → PDF | 依賴 LibreOffice／商業 SDK | P3 | 高 |
@@ -294,6 +298,7 @@
 | G15 | 列印成 PDF | 系統列印 | P0 | 低 |
 | G16 | 擷取內嵌圖片 | 取出 PDF 內原始圖片，不是把頁面轉圖 | P1 | 中 |
 | G17 | 建立 PDF | 從圖片、空白頁、剪貼簿建立新 PDF；可調頁面尺寸與順序 | P0 | 低 |
+| G18 | PDF/A-2a（accessible） | Tagged PDF、structure tree、Alt text、Lang；需 PDF/A validator | P2 | 極高 |
 
 **Build vs Buy**：PDF → DOCX／XLSX 不建議自己從零做。若真的需要，先評估商業 SDK（PDFTron／Apryse、Adobe PDF Services）或 LibreOffice headless；兩者都有成本與授權問題。內部使用可以先做「PDF → 文字／RTF」，品質可接受再談 Office。
 
@@ -325,7 +330,7 @@
 | I3 | 移除密碼 | 需有權限 | P1 | 中 |
 | I4 | 權限設定 | 列印、複製、修改、註解 | P1 | 中 |
 | I5 | AES 加密 | AES-128／256 | P1 | 中 |
-| I6 | 手動塗黑 | 畫框、調整、刪除 | P1 | 中 |
+| I6 | 手動塗黑 | 文字／圖片／區域；畫框、調整、刪除 | P1 | 中 |
 | I7 | 關鍵字塗黑 | 逐筆預覽、全部套用 | P1 | 中 |
 | I8 | PII 預設 | 信用卡、Email、電話、SSN、IBAN、IP、生日、郵遞區號 | P2 | 中 |
 | I9 | 自訂 regex | 使用者自訂規則 | P2 | 中 |
@@ -340,6 +345,7 @@
 | I18 | 憑證簽章 | 簽署 PDF | P3 | 高 |
 | I19 | 清理報告 | 列出移除了什麼 | P2 | 中 |
 | I20 | 塗黑樣式預設 | Confidential／Private／Redacted 等標記樣式 | P2 | 低 |
+| I21 | 塗黑外觀控制 | 填充色、框線、透明度、覆蓋文字、馬賽克 | P1 | 低 |
 
 **塗黑技術策略**：
 
@@ -353,8 +359,8 @@
 |---|---|---|---|---|
 | J1 | 文字浮水印 | 字型、大小、顏色、透明度、旋轉、位置、平鋪 | P0 | 中 |
 | J2 | 圖片浮水印 | Logo、透明度、縮放 | P0 | 中 |
-| J3 | 頁首／頁尾 | 左中右、奇偶頁、首頁不同 | P0 | 中 |
-| J4 | 頁碼 | 格式、起始頁、跳過首頁 | P0 | 低 |
+| J3 | 頁首／頁尾 | 左中右、奇偶頁、首頁不同；文件名稱／標題／作者／日期 token | P0 | 中 |
+| J4 | 頁碼 | 格式、起始頁、跳過首頁、Page X of Y／總頁數 | P0 | 低 |
 | J5 | 日期／時間 | 插入目前日期 | P1 | 低 |
 | J6 | Bates 編號 | 前綴、後綴、位數、起始 | P1 | 中 |
 | J7 | 印章 | 預設、文字、圖片、日期 | P1 | 中 |
@@ -447,7 +453,7 @@
 | O10 | 重設設定 | 回復預設 | P1 | 低 |
 | O11 | 關於／授權 | 版本、第三方授權 | P1 | 低 |
 | O12 | 最近文件上限 | 數量、清除 | P1 | 低 |
-| O13 | 字型選擇器 | 系統字型；可選用 Google Fonts 下載（離線時用快取） | P2 | 中 |
+| O13 | 字型選擇器／缺字下載 | 系統字型；缺字型偵測＋同意後下載（Google Fonts）；離線用快取 | P2 | 中 |
 | O14 | 主題風格／強調色 | 多組配色，不只明暗 | P2 | 低 |
 | O15 | 大檔模式 | 自動／整份載入／分頁載入，控制記憶體 | P1 | 中 |
 | O16 | 首次啟動引導 | 語言、主題、預設 PDF App、快速導覽 | P1 | 低 |
@@ -482,6 +488,7 @@
 | Q6 | 鍵盤導覽 | 全鍵盤操作 | P1 | 中 |
 | Q7 | 高對比／減少動態 | 跟隨系統 | P2 | 低 |
 | Q8 | 字型縮放 | 動態字型 | P2 | 低 |
+| Q9 | 額外語言 | 日、韓、德、法、西、義、葡、俄等，依需求分批加入 | P2 | 中 |
 
 ---
 
@@ -501,7 +508,8 @@
 | 壓縮、擷取圖片、轉圖片 | 有 | M1～M2 |
 | 擷取內嵌圖片（原始圖，非頁面轉圖） | 有 | M2 |
 | 連結／書籤編輯 | 有 | M1 |
-| PDF/A | 有 | M3 |
+| PDF/A-1b／2b／3b | 有 | M2～M3 |
+| PDF/A-2a（tagged） | 有（需 structure tree） | M4／SDK |
 | 密碼／權限 | 有 | M2 |
 | 塗黑（關鍵字／PII／OCR） | 有（先 rasterize） | M3 |
 | 版本比對 | 有 | M3 |
@@ -594,6 +602,93 @@
 | O 設定 | 主題/語言 | 快捷鍵 | OCR/快取 | 進階 | — |
 | P 可靠性 | Undo 骨架 | 自動儲存/恢復 | 備份 | 大檔模式 | — |
 | Q 國際化 | 繁中 | 英文 | — | 更多語言 | RTL |
+
+### 6.4 官網 Features 對照（2026-11-02）
+
+來源：
+
+- <https://revpdf.com/features>
+- <https://revpdf.com/whats-new>
+- <https://revpdf.com/pdf-editor-mac>
+
+狀態：✅ 已覆蓋｜◐ 部分／刻意縮小｜⚠ 本次補上｜✳ 刻意不做或平台差異
+
+#### Edit and review
+
+| 官網功能 | PRD 對應 | 狀態 | 備註 |
+|---|---|---|---|
+| WYSIWYG content editing | E1–E6、E24 | ✅ | 真文字編輯列 M4；E24 補 WYSIWYG 控制 |
+| PDF Compare | L1–L10 | ✅ | M3 |
+| Annotations | C1–C5、C13 | ✅ | M1 |
+| Draw and markup | C7–C8 | ✅ | M1 |
+| Find and replace | E9 | ✅ | 補「全部取代」 |
+| Tabbed viewer | A2 | ✅ | M0 |
+| Links and bookmarks | A21–A22 | ✅ | M1 |
+
+#### Protect and complete
+
+| 官網功能 | PRD 對應 | 狀態 | 備註 |
+|---|---|---|---|
+| Customisable redaction | I6–I21 | ✅ | 補 I21 塗黑外觀控制 |
+| Headers and footers | J3–J5、J10 | ✅ | 補文件名稱/標題/作者/日期 token |
+| Form builder | D1、D10–D12、D16 | ✅ | D1 加平面表單啟發式（P2） |
+| Form filling | D2–D9 | ✅ | M2 |
+| Electronic signing | C10–C11 | ✅ | M1 |
+| Watermarks | J1–J2、J7 | ✅ | M1 |
+
+#### Organise, optimise, automate
+
+| 官網功能 | PRD 對應 | 狀態 | 備註 |
+|---|---|---|---|
+| Flows | M1–M17 | ✅ | M3 |
+| Compression | H1–H12 | ✅ | M2 基本、M3 進階 |
+| Split and merge | B8–B12 | ✅ | B12 補自訂分割線位置 |
+| Page organisation | B1–B3、B18 | ✅ | M1 |
+| Metadata editor | K1–K2 | ✅ | M1/M2 |
+
+#### Capture and convert
+
+| 官網功能 | PRD 對應 | 狀態 | 備註 |
+|---|---|---|---|
+| On-device OCR | F1–F18 | ✅ | M2 |
+| PDF to Excel | G6 | ✅ | M4；品質風險高 |
+| PDF to Word | G5 | ✅ | M4；品質風險高 |
+| PDF/A-2a conversion | G18 | ⚠ | **原本漏列**；已補，P2/M4，需 tagged PDF |
+| PDF and image conversion | G1–G2 | ✅ | M1/M2 |
+| Document scanning | F2、F4、F18 | ✅ | 補邊緣偵測/透視校正；macOS 用 Continuity Camera |
+
+#### Workspace and Mac page
+
+| 官網功能 | PRD 對應 | 狀態 | 備註 |
+|---|---|---|---|
+| Localisation | Q1–Q2、Q9 | ◐ | 第一版繁中/英文；其他語言 P2 |
+| New themes | O1、O14 | ✅ | M1/M2 |
+| Large-PDF performance | A3、O15、P7 | ✅ | M0/M1 |
+| Missing font download | O13 | ✅ | 補「缺字型偵測＋同意後下載」 |
+| Apple silicon + Intel | 04 技術設計 | ✅ | Universal 2 |
+| macOS 11 support | — | ✳ | 本產品規劃 macOS 14+ |
+| Linux / Windows | — | ✳ | 只做 macOS |
+| Homebrew Cask | — | ✳ | 內部使用，暫不處理發佈通路 |
+| Free / no watermark / no account | 01 產品原則 | ✅ | 內部使用，無金流/廣告/帳號 |
+
+**對照結論**
+
+1. **真正漏掉的只有一個**：官網把 **PDF/A-2a** 列為 5.0 功能，PRD 的 G8 只寫 1b/2b/3b，沒有 2a。已補 **G18**，並在 [10-hard-features.md](10-hard-features.md) 說明 tagged PDF/structure tree 的難度與商業 SDK 選項。
+2. **有 7 個功能「有列但不夠明確」**，已補進對應 ID：
+   - 自訂分割線位置（B12）
+   - 頁首頁尾的文件資訊 token（J3）
+   - Page X of Y（J4）
+   - 塗黑外觀控制（I21）
+   - 掃描邊緣偵測/透視校正（F4、F18）
+   - 缺字型下載（O13）
+   - 尋找取代的 Replace All（E9）
+3. **刻意縮小或不同**：
+   - 官網支援多語言；我們第一版只做繁中/英文（Q9 保留擴充）。
+   - 官網支援 macOS 11；我們規劃 macOS 14+。
+   - 官網有 Linux/Windows；我們只做 macOS。
+   - 官網有 Homebrew Cask；內部使用暫不處理。
+   - 官網免費/無浮水印/無帳號；我們內部使用，同樣沒有金流/廣告/帳號。
+4. 除了 PDF/A-2a，**官網 Features 頁沒有發現其他完全沒列的功能**。
 
 ---
 

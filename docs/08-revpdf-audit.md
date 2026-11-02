@@ -119,14 +119,14 @@ Flutter / Dart AOT (App.framework)
 |---|---|
 | Merge | 合併多份 PDF |
 | Split | 依範圍/每頁/大小分割 |
-| Split Middle | 水平/垂直對半 |
+| Split Middle | 水平/垂直；可選中間或自訂位置 |
 | Compress | 影像取樣/品質 |
 | Organizer | 頁面排序/旋轉/刪除 |
 | Extract Images | 擷取內嵌圖片 |
 | PDF to Images | 頁面轉圖片 |
 | PDF to Word | PDF → DOCX |
 | PDF to Excel | PDF → XLSX（表格/整頁） |
-| Convert PDF/A | PDF/A |
+| Convert PDF/A | PDF/A-1b/2b/3b；官網另列 2a |
 | Make Searchable | OCR 文字層 |
 | Metadata | 文件屬性 |
 | Watermark | 文字/圖片浮水印 |
@@ -193,12 +193,13 @@ Flutter / Dart AOT (App.framework)
 | 頁面排序/旋轉/刪除 | 有 | M1 | PDFKit |
 | 插入/複製/擷取頁 | 有 | M1 | |
 | 合併/分割/中間分割 | 有 | M1 | |
+| 自訂分割線位置 | 有 | M1 | B12 |
 | 依大小分割 | 有 | M1 | |
 | 裁切/調整頁面尺寸 | 有 | M1 | |
 | 註解（highlight/underline/strike/note/text/ink/shape） | 有 | M1 | PDFKit |
 | 簽名/縮寫/去背 | 有 | M1 | |
 | 印章 | 有 | M1 | |
-| 浮水印/頁首頁尾/頁碼 | 有 | M1 | |
+| 浮水印/頁首頁尾/頁碼 | 有 | M1 | 含文件名稱/標題/作者/日期 token、Page X of Y |
 | Bates | 有 | M1–M2 | |
 | 匯出圖片/列印/分享 | 有 | M1 | |
 | 連結管理 | 有 | M1 | A21 |
@@ -206,14 +207,17 @@ Flutter / Dart AOT (App.framework)
 | 建立 PDF | 有 | M1 | G17 |
 | 表單填寫/flatten | 有 | M2 | |
 | OCR/可搜尋 | 有 | M2 | Vision |
+| 掃描邊緣偵測/透視校正 | 有 | M2 | F4/F18 |
+| 缺字型偵測/下載 | 有 | M2 | O13；預設關閉、需同意 |
 | 密碼/權限 | 有 | M2 | 加入密碼可能延後 |
 | 壓縮 | 有 | M2 | |
 | 擷取內嵌圖片 | 有 | M2 | G16 |
-| PDF/A | 有 | M2–M3 | |
+| PDF/A-1b／2b／3b | 有 | M2–M3 | G8 |
+| PDF/A-2a（accessible/tagged） | 有（需 tagged PDF） | M4／SDK | G18；難度高 |
 | 中繼資料/附件/JS 清理 | 有 | M2 | |
 | Quick Action/預設 App | 有 | M2 | |
 | 表單建立 | 有 | M3 | |
-| 塗黑（手動/關鍵字/PII/OCR） | 有 | M3 | rasterize 先行 |
+| 塗黑（手動/關鍵字/PII/OCR） | 有 | M3 | rasterize 先行；含外觀控制 I21 |
 | 版本比對 | 有 | M3 | |
 | Flows | 有 | M3 | |
 | 真文字編輯 | 後期 | M4 | 高風險 |

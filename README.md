@@ -32,14 +32,14 @@ The product is intentionally:
 | Sign & forms | Draw/import signatures, fill forms, flatten, build forms |
 | Edit | Images, text boxes, links, bookmarks; true text editing is a later phase |
 | Scan & OCR | Import/scan images, Apple Vision OCR, invisible searchable text layer |
-| Convert | PDF → images, images → PDF, text/RTF, PDF/A; Office export is a later phase |
+| Convert | PDF → images, images → PDF, text/RTF, PDF/A-1b/2b/3b; PDF/A-2a and Office export are later phases |
 | Protect | Passwords, permissions, auto-redaction, PII scanning, metadata cleanup |
 | Decorate | Watermarks, headers/footers, page numbers, Bates numbering, stamps |
 | Review | Text + visual diff, page matching, change list |
 | Automate | Flows: chain compress, OCR, watermark, rotate, split, redact, export |
 | Desktop | Quick Actions, default PDF app, Dock menu, keyboard shortcuts, recovery |
 
-The full, itemized scope is in [docs/02-prd.md](docs/02-prd.md) — **266 feature rows** across 17 groups, each with an ID, priority, and difficulty.
+The full, itemized scope is in [docs/02-prd.md](docs/02-prd.md) — **271 feature rows** across 17 groups, each with an ID, priority, and difficulty.
 
 ---
 
@@ -56,6 +56,7 @@ The full, itemized scope is in [docs/02-prd.md](docs/02-prd.md) — **266 featur
 | [07 · Roadmap](docs/07-roadmap.md) | M0–M4 milestones, estimates, dependencies, risk register, phase gates |
 | [08 · RevPDF Audit](docs/08-revpdf-audit.md) | What was observed in RevPDF 5.0.1 and how this plan maps to it |
 | [09 · Decisions](docs/09-decisions.md) | Decision log, open questions, ADR-style rationale |
+| [10 · Hard Features](docs/10-hard-features.md) | Deep-dive research: natural text editing, compare, Flows, Excel/Word/PDF/A-2a/compression |
 
 ---
 
@@ -66,7 +67,7 @@ The full, itemized scope is in [docs/02-prd.md](docs/02-prd.md) — **266 featur
 | **M0** | App shell, open/view, thumbnails, outline, search, tabs | Planned |
 | **M1** | Page operations, merge/split, annotations, signature, watermark, export, print, undo/recovery | Planned |
 | **M2** | OCR, forms fill/flatten, password/permissions, compress, metadata, Quick Actions | Planned |
-| **M3** | Form builder, redaction, compare, Flows, PDF/A | Planned |
+| **M3** | Form builder, redaction, compare, Flows, PDF/A-1b/2b/3b | Planned |
 | **M4** | True text editing, PDF → Word/Excel, digital signatures | Optional / not committed |
 
 For internal use, **M2 is the first usable release** and **M3 is the first complete release**. M4 is deliberately gated because true text editing and Office conversion are multi-month engineering problems.

@@ -57,6 +57,7 @@ struct ReaderView: View {
             case .compress: CompressSheet(model: model) { model.sheet = nil }
             case .signature: SignatureSheet(model: model) { model.sheet = nil }
             case .exportImages: ExportImagesSheet(model: model) { model.sheet = nil }
+            case .decorate: DecorateSheet(model: model) { model.sheet = nil }
             }
         }
         .task(id: model.notice) {
@@ -211,6 +212,7 @@ struct ReaderView: View {
                 Button("分割成每頁一個檔案…") { model.splitPages(rangesText: nil) }
                 Button("依範圍分割…") { splitByRanges() }
             }.disabled(busy)
+            Button("浮水印、頁首頁尾與頁碼…", systemImage: "text.append") { model.sheet = .decorate }.disabled(busy)
             Menu("掃描頁面", systemImage: "text.viewfinder") {
                 Button("文字辨識（OCR）") { model.runOCR() }
                 Button("壓縮…") { model.sheet = .compress }

@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum M2Sheet: String, Identifiable {
-    case metadata, encrypt, compress, signature, exportImages
+    case metadata, encrypt, compress, signature, exportImages, decorate
     var id: String { rawValue }
 }
 
@@ -297,5 +297,123 @@ struct ExportImagesSheet: View {
             }
         }
         .onAppear { if !model.selectedPages.isEmpty { scope = .selected } }
+    }
+}
+
+struct DecorateSheet: View {
+    let model: ReaderModel
+    let close: () -> Void
+    enum Tab: String, CaseIterable, Identifiable { case watermark, headerFooter; var id: String { rawValue } }
+    @State private var tab = Tab.watermark
+    @State private var range = ""
+    @State private var mark = Decoration.Watermark()
+    @State private var markColor = Color.gray
+    @State private var text = HeaderFooterState()
+    @State private var showingPicker = false
+    @State private var imageName: String?
+
+    struct HeaderFooterState {
+        var header = ["", "", ""]
+        var footer = ["", "{page}", ""]
+        var size = 10.0
+        var margin = 28.0
+        var skipFirst = false
+        var mirror = false
+        var start = 1
+        var color = Color.black
+    }
+
+    private var pages: [Int]? {
+        let trimmed = range.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return Array(0..<model.pageCount) }
+        guard let ranges = try? PDFEditing.parseRanges(trimmed, pageCount: model.pageCount) else { return nil }
+        return Array(Set(ranges.flatMap { $0.map { $0 - 1 } })).sorted()
+    }
+
+    private var headerFooter: Decoration.HeaderFooter {
+        var spec = Decoration.HeaderFooter()
+        spec.header = text.header; spec.footer = text.footer; spec.fontSize = CGFloat(text.size); spec.margin = CGFloat(text.margin)
+        spec.skipFirst = text.skipFirst; spec.mirrorEvenPages = text.mirror; spec.startNumber = text.start; spec.color = NSColor(text.color)
+        return spec
+    }
+
+    var body: some View {
+        SheetFrame(title: "浮水印、頁首頁尾與頁碼", symbol: "text.append") {
+            Picker("類型", selection: $tab) { Text("浮水印").tag(Tab.watermark); Text("頁首／頁尾／頁碼").tag(Tab.headerFooter) }
+                .pickerStyle(.segmented).labelsHidden()
+            if tab == .watermark { watermarkForm } else { headerFooterForm }
+            TextField("套用頁面（空白＝全部，例如 1-3, 5）", text: $range).textFieldStyle(.roundedBorder)
+            Text("加入後這些頁面會重新產生，頁面文字仍可選取。可以復原。").font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+                Button("加入") { apply() }.keyboardShortcut(.defaultAction).prominentGlassButton()
+                    .disabled(pages == nil || (tab == .watermark ? mark.isEmpty : headerFooter.isEmpty))
+            }
+        }
+        .fileImporter(isPresented: $showingPicker, allowedContentTypes: [.image]) { result in
+            guard case .success(let url) = result else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            if let source = CGImageSourceCreateWithURL(url as CFURL, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+                mark.image = image; imageName = url.lastPathComponent
+            } else { model.error = L("無法讀取這張圖片。") }
+        }
+    }
+
+    private func apply() {
+        guard let chosen = pages else { return }
+        var watermark = mark; watermark.color = NSColor(markColor)
+        let spec = headerFooter
+        let isMark = tab == .watermark
+        close()
+        DispatchQueue.main.async {
+            model.decorate(watermark: isMark ? watermark : nil, headerFooter: isMark ? nil : spec, pages: chosen)
+        }
+    }
+
+    private var watermarkForm: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("浮水印文字（例如「機密」）", text: $mark.text).textFieldStyle(.roundedBorder)
+            HStack {
+                Button(imageName == nil ? "改用圖片…" : "換圖片…") { showingPicker = true }.controlSize(.small)
+                if let imageName { Text(imageName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Button("移除圖片") { mark.image = nil; self.imageName = nil }.controlSize(.small) }
+            }
+            if mark.image == nil {
+                LabeledContent("字級") { Slider(value: $mark.fontSize, in: 16...200) }
+                ColorPicker("顏色", selection: $markColor)
+            } else {
+                LabeledContent("圖片大小") { Slider(value: $mark.imageScale, in: 0.1...1) }
+            }
+            LabeledContent("透明度") { Slider(value: $mark.opacity, in: 0.05...1) }
+            LabeledContent("旋轉") { Slider(value: $mark.rotation, in: -90...90, step: 5) }
+            Picker("位置", selection: $mark.position) { ForEach(Decoration.Position.allCases) { Text($0.label).tag($0) } }.disabled(mark.tiled)
+            Toggle("平鋪整頁", isOn: $mark.tiled)
+            Toggle("放在頁面內容後面", isOn: $mark.behind)
+        }
+    }
+
+    private var headerFooterForm: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+                GridRow { Text("頁首").font(.caption).foregroundStyle(.secondary).gridColumnAlignment(.leading); Color.clear; Color.clear }
+                GridRow { ForEach(0..<3, id: \.self) { TextField(["左", "中", "右"][$0], text: $text.header[$0]).textFieldStyle(.roundedBorder) } }
+                GridRow { Text("頁尾").font(.caption).foregroundStyle(.secondary); Color.clear; Color.clear }
+                GridRow { ForEach(0..<3, id: \.self) { TextField(["左", "中", "右"][$0], text: $text.footer[$0]).textFieldStyle(.roundedBorder) } }
+            }
+            HStack(spacing: 6) {
+                Text("頁碼樣式").font(.caption).foregroundStyle(.secondary)
+                Button("1") { text.footer[1] = "{page}" }
+                Button("Page 1 of N") { text.footer[1] = "Page {page} of {pages}" }
+                Button("第 1 頁，共 N 頁") { text.footer[1] = "第 {page} 頁，共 {pages} 頁" }
+            }.controlSize(.small)
+            Text("可用代號：{page} {pages} {title} {author} {filename} {date}").font(.caption).foregroundStyle(.secondary)
+            HStack { LabeledContent("字級") { Slider(value: $text.size, in: 6...24, step: 1) }; ColorPicker("", selection: $text.color).labelsHidden() }
+            LabeledContent("邊距") { Slider(value: $text.margin, in: 12...72, step: 2) }
+            Stepper("起始頁碼：\(text.start)", value: $text.start, in: 0...9999)
+            Toggle("首頁不加（頁碼從第二頁開始算）", isOn: $text.skipFirst)
+            Toggle("偶數頁左右對調（像書本）", isOn: $text.mirror)
+        }
     }
 }

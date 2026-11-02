@@ -241,7 +241,7 @@ enum PDFProcessing {
     }
 
     /// Loads a one-page PDF and re-attaches the original page's annotations (internal-link targets are dropped).
-    @MainActor private static func finish(_ data: Data, carrying original: PDFPage, cropOrigin: CGPoint, rotation: Int = 0) -> PDFPage? {
+    @MainActor static func finish(_ data: Data, carrying original: PDFPage, cropOrigin: CGPoint, rotation: Int = 0) -> PDFPage? {
         guard let document = PDFDocument(data: data), let page = document.page(at: 0)?.copy() as? PDFPage else { return nil }
         // A rotated original has been baked upright, so its annotations are not carried over.
         guard rotation == 0 else { return page }

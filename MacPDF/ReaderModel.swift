@@ -559,6 +559,38 @@ final class ReaderModel: NSObject {
         if error == nil { notice = success(results.count) }
     }
 
+    /// Watermark and/or header-footer over the given pages. Pages are rebuilt, so their own text stays real text.
+    func decorate(watermark: Decoration.Watermark?, headerFooter: Decoration.HeaderFooter?, pages: [Int]) {
+        guard let document, jobTask == nil, redaction == nil, !pages.isEmpty else { return }
+        let hasMark = watermark.map { !$0.isEmpty } ?? false, hasText = headerFooter.map { !$0.isEmpty } ?? false
+        guard hasMark || hasText else { notice = L("沒有要加入的內容。"); return }
+        let attributes = document.documentAttributes ?? [:]
+        let info = Decoration.Info(title: (attributes[PDFDocumentAttribute.titleAttribute] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? title.replacingOccurrences(of: ".pdf", with: ""),
+                                   author: attributes[PDFDocumentAttribute.authorAttribute] as? String ?? "", filename: title)
+        let count = document.pageCount
+        let start = revision
+        job = JobProgress(title: L("加入中"), done: 0, total: pages.count)
+        jobTask = Task { [weak self] in
+            var results: [Int: PDFPage] = [:]
+            for (n, index) in pages.enumerated() {
+                guard let self, !Task.isCancelled else { break }
+                self.job?.done = n
+                guard let page = self.document?.page(at: index) else { continue }
+                let rebuilt = PDFProcessing.decoratedPage(from: page, behind: { context, size in
+                    if let mark = watermark, mark.behind { Decoration.draw(mark, in: context, size: size) }
+                }, front: { context, size in
+                    if let mark = watermark, !mark.behind { Decoration.draw(mark, in: context, size: size) }
+                    if let spec = headerFooter { Decoration.draw(spec, page: index, count: count, info: info, in: context, size: size) }
+                })
+                if let rebuilt { results[index] = rebuilt }
+                await Task.yield()
+            }
+            self?.finishPageJob(results: results, startRevision: start, cancelledMessage: L("已取消。"), emptyMessage: L("無法加入內容。")) { count in
+                String(format: L("已加入到 %ld 頁，可以復原。"), count)
+            }
+        }
+    }
+
     func resetForm() { edit { try $0.resetFormFields() }; if error == nil { notice = L("已清除表單欄位。") } }
     func flattenForms() { edit { try $0.flattenForms() }; if error == nil { notice = L("表單已烙入頁面，無法再填寫。可以復原。") } }
 

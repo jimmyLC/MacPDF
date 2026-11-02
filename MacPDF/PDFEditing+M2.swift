@@ -9,12 +9,35 @@ extension PDFEditing {
     func replace(pages replacements: [Int: PDFPage]) throws {
         guard !replacements.isEmpty else { return }
         try mutate { doc in
+            // Links on a rebuilt page lose their targets while it is made. Note where each one pointed (as a page
+            // number, which a replacement does not change) before anything is swapped, and restore them afterwards.
+            struct Link { let page: Int; let slot: Int; let count: Int; let target: Int; let point: CGPoint }
+            var links: [Link] = []
+            for index in replacements.keys.sorted() {
+                guard let old = doc.page(at: index) else { throw EditError.invalidPage }
+                let annotations = old.annotations
+                for (slot, annotation) in annotations.enumerated() {
+                    let destination = annotation.destination ?? (annotation.action as? PDFActionGoTo)?.destination
+                    guard let destination, let page = destination.page else { continue }
+                    let target = doc.index(for: page)
+                    if target != NSNotFound { links.append(Link(page: index, slot: slot, count: annotations.count, target: target, point: destination.point)) }
+                }
+            }
             var pairs: [(old: PDFPage, new: PDFPage)] = []
             for index in replacements.keys.sorted() {
                 guard let old = doc.page(at: index), let new = replacements[index]?.copy() as? PDFPage else { throw EditError.invalidPage }
                 doc.removePage(at: index)
                 doc.insert(new, at: index)
                 pairs.append((old, new))
+            }
+            for link in links {
+                guard let page = doc.page(at: link.page), let target = doc.page(at: link.target) else { continue }
+                let annotations = page.annotations
+                if annotations.count == link.count, annotations[link.slot].type == "Link" {
+                    let destination = PDFDestination(page: target, at: link.point)
+                    annotations[link.slot].destination = destination
+                    annotations[link.slot].action = PDFActionGoTo(destination: destination)
+                }
             }
             Self.rebind(in: doc, pairs: pairs)
         }

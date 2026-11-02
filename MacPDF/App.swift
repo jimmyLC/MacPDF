@@ -108,6 +108,7 @@ struct ReaderCommands: Commands {
             Button("清除表單欄位") { PDFWindows.shared.keyModel?.resetForm() }
             Button("扁平化表單") { PDFWindows.shared.keyModel?.flattenForms() }
             Divider()
+            Button("浮水印、頁首頁尾與頁碼…") { PDFWindows.shared.keyModel?.sheet = .decorate }
             Button("塗黑敏感資訊…") { PDFWindows.shared.keyModel?.beginRedaction() }
             Divider()
             Button("編輯文件資訊…") { PDFWindows.shared.keyModel?.sheet = .metadata }

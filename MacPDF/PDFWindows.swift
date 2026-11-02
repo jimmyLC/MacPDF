@@ -38,6 +38,43 @@ import SwiftUI
             if present { controller.showWindow(nil) }
         }
     }
+    private var compareControllers: [NSWindowController] = []
+
+    /// Asks for two PDFs (older first by modification date) and opens a side-by-side comparison.
+    func chooseAndCompare() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.pdf]; panel.allowsMultipleSelection = true
+        panel.message = L("選擇要比較的兩份 PDF。修改時間較早的會當作舊版，之後可以對調。")
+        guard panel.runModal() == .OK else { return }
+        guard panel.urls.count == 2 else {
+            let alert = NSAlert(); alert.messageText = L("請剛好選擇兩份 PDF。"); alert.runModal(); return
+        }
+        let dated = panel.urls.sorted {
+            let a = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let b = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return a < b
+        }
+        compare(old: dated[0], new: dated[1])
+    }
+
+    func compare(old: URL, new: URL) {
+        let model = CompareModel()
+        let scoped = [old, new].map { ($0, $0.startAccessingSecurityScopedResource()) }
+        model.load(old: old, new: new)
+        scoped.forEach { if $0.1 { $0.0.stopAccessingSecurityScopedResource() } }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.title = String(format: L("比較：%@ ↔ %@"), old.lastPathComponent, new.lastPathComponent)
+        window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.minSize = NSSize(width: 980, height: 560)
+        window.contentViewController = NSHostingController(rootView: CompareView(model: model))
+        window.setContentSize(NSSize(width: 1280, height: 800))
+        let controller = NSWindowController(window: window)
+        compareControllers.append(controller)
+        window.center()
+        controller.showWindow(nil)
+    }
+
     private func createWindow() -> NSWindowController {
         let model = ReaderModel()
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 700), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -57,7 +94,9 @@ import SwiftUI
         return controller
     }
     @objc private func closed(_ note: Notification) {
-        guard let window = note.object as? NSWindow, let controller = controllers.first(where: { $0.window === window }) else { return }
+        guard let window = note.object as? NSWindow else { return }
+        compareControllers.removeAll { $0.window === window }
+        guard let controller = controllers.first(where: { $0.window === window }) else { return }
         models.removeValue(forKey: ObjectIdentifier(controller))
         controllers.removeAll { $0 === controller }
     }

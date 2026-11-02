@@ -18,6 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let style = ProcessInfo.processInfo.environment["MACPDF_APPEARANCE"] {
             NSApp.appearance = NSAppearance(named: style == "light" ? .aqua : .darkAqua)
         }
+        // MACPDF_COMPARE=/path/old.pdf:/path/new.pdf opens the comparison window directly.
+        if let pair = ProcessInfo.processInfo.environment["MACPDF_COMPARE"]?.split(separator: ":").map(String.init), pair.count == 2 {
+            PDFWindows.shared.compare(old: URL(fileURLWithPath: pair[0]), new: URL(fileURLWithPath: pair[1]))
+        }
         #endif
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
@@ -64,6 +68,7 @@ struct ReaderCommands: Commands {
                 panel.allowsMultipleSelection = true
                 if panel.runModal() == .OK { PDFWindows.shared.open(panel.urls) }
             }.keyboardShortcut("o")
+            Button("比較兩份 PDF…") { PDFWindows.shared.chooseAndCompare() }
         }
         CommandMenu("文件") {
             Button("文字辨識（OCR）") { PDFWindows.shared.keyModel?.runOCR() }

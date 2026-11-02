@@ -42,6 +42,15 @@ Manual redaction follows the v1 (rasterize) guarantee in `docs/05-security-priva
 - Encrypted PDFs and PDFs with signature fields are refused. Unmarked pages keep their annotations and any actions on them.
 - Marked regions are PDF annotations while reviewing. Save, print and undo are disabled during review so they cannot leak into another file.
 
+## M4 compare implementation and limitations
+
+File > Compare two PDFs… opens two files side by side (the earlier-modified one is "old"; a button swaps them).
+
+- Pages are matched first (longest common subsequence over word-set similarity, so inserted, deleted and moved pages are found), then each matched pair is diffed word by word (NaturalLanguage tokenizer, so Chinese is split too).
+- Differences are painted on in-memory copies only (red removed, green added, yellow changed) and listed on the right; previous/next steps through them. Source files are never modified.
+- Text only: no visual (pixel) diff, no formatting diff, no ignore-header/footer filter, no exported report. A side with almost no stored text (a scan) shows a warning to run OCR first.
+- Tested with `Tests/M4Tests.swift` (7 tests) and by hand in a debug build (`MACPDF_COMPARE=old.pdf:new.pdf`, together with both files passed to `open`, because the sandbox only grants those files).
+
 ## Verification and outstanding work
 
 - Signed, sandbox-enabled Apple Silicon debug build and automated tests pass on the development Mac.

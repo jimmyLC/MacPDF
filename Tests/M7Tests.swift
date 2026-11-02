@@ -170,4 +170,89 @@ final class M7Tests: XCTestCase {
         let target = try XCTUnwrap((moved.destination ?? (moved.action as? PDFActionGoTo)?.destination)?.page, "link has no target at all")
         XCTAssertEqual(edit.document.index(for: target), 1, "the link still goes to page 2")
     }
+
+    // MARK: Build, insert, rotate
+
+    func writePDF(_ pages: [[String]], name: String) throws -> URL {
+        let url = try tempFolder().appendingPathComponent(name)
+        XCTAssertTrue(try textDocument(pages).write(to: url))
+        return url
+    }
+    func writeImage(name: String, width: Int = 300, height: Int = 200) throws -> URL {
+        let image = NSImage(size: NSSize(width: width, height: height))
+        image.lockFocus(); NSColor.blue.setFill(); NSRect(x: 0, y: 0, width: width, height: height).fill(); image.unlockFocus()
+        let url = try tempFolder().appendingPathComponent(name)
+        let data = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation))?.representation(using: .png, properties: [:]))
+        try data.write(to: url)
+        return url
+    }
+    func firstWord(_ page: PDFPage?) -> String { (page?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    func testBuilderKeepsOrderAndRanges() throws {
+        let pdf = try writePDF([["alpha"], ["beta"], ["gamma"], ["delta"]], name: "src.pdf")
+        let image = try writeImage(name: "pic.png")
+        let built = try PDFBuilder.build([.pdf(pdf, ranges: "2-3, 1"), .image(image), .blank], sheet: .letter)
+        XCTAssertEqual(built.pageCount, 5)
+        XCTAssertEqual((0..<3).map { firstWord(built.page(at: $0)) }, ["beta", "gamma", "alpha"])
+        XCTAssertEqual(built.page(at: 3)?.bounds(for: .cropBox).width ?? 0, 792, accuracy: 0.1, "landscape picture on a Letter sheet")
+        XCTAssertEqual(built.page(at: 4)?.bounds(for: .cropBox).size, CGSize(width: 612, height: 792))
+        XCTAssertEqual((0..<5).map { built.page(at: $0)?.label }, ["1", "2", "3", "4", "5"])
+    }
+
+    func testBuilderErrors() throws {
+        XCTAssertThrowsError(try PDFBuilder.build([], sheet: .a4))
+        let pdf = try writePDF([["one"]], name: "one.pdf")
+        XCTAssertThrowsError(try PDFBuilder.build([.pdf(pdf, ranges: "5")], sheet: .a4))
+        XCTAssertThrowsError(try PDFBuilder.build([.image(URL(fileURLWithPath: "/nonexistent.png"))], sheet: .a4))
+        let locked = try tempFolder().appendingPathComponent("locked.pdf")
+        XCTAssertTrue(try textDocument([["secret"]]).write(to: locked, withOptions: [.userPasswordOption: "pw", .ownerPasswordOption: "pw"]))
+        XCTAssertThrowsError(try PDFBuilder.build([.pdf(locked, ranges: "")], sheet: .a4))
+    }
+
+    func testInsertAnotherDocumentAtAPosition() throws {
+        let edit = PDFEditing(document: try textDocument([["one"], ["two"], ["three"]]))
+        let other = try textDocument([["X"], ["Y"]])
+        try edit.insert(other, before: 1)
+        XCTAssertEqual((0..<5).map { firstWord(edit.document.page(at: $0)) }, ["one", "X", "Y", "two", "three"])
+        try edit.insert(other, before: nil)
+        XCTAssertEqual(edit.document.pageCount, 7)
+        XCTAssertEqual(firstWord(edit.document.page(at: 6)), "Y")
+        try edit.undo(); try edit.undo()
+        XCTAssertEqual(edit.document.pageCount, 3)
+    }
+
+    func testRotateByAnyAngle() throws {
+        let edit = PDFEditing(document: try textDocument([["a"], ["b"]]))
+        try edit.rotate(pages: [0], by: -90)
+        XCTAssertEqual(edit.document.page(at: 0)?.rotation, 270)
+        try edit.rotate(pages: [0, 1], by: 180)
+        XCTAssertEqual((0..<2).map { edit.document.page(at: $0)?.rotation }, [90, 180])
+        try edit.rotate(pages: [0, 1], by: 90)
+        XCTAssertEqual((0..<2).map { edit.document.page(at: $0)?.rotation }, [180, 270])
+    }
+
+    func testBlankPageOfACustomSize() throws {
+        let edit = PDFEditing(document: try textDocument([["a"]]))
+        try edit.insertBlankPage(before: 0, size: CGSize(width: 300, height: 400))
+        try edit.insertBlankPage(before: 2, size: CGSize(width: 100, height: 100))
+        XCTAssertEqual((0..<3).map { edit.document.page(at: $0)?.bounds(for: .cropBox).size }, [CGSize(width: 300, height: 400), CGSize(width: 612, height: 792), CGSize(width: 100, height: 100)])
+        XCTAssertThrowsError(try edit.insertBlankPage(before: 9, size: CGSize(width: 10, height: 10)))
+    }
+
+    func testTIFFExport() throws {
+        let page = try XCTUnwrap(try textDocument([["tiff"]]).page(at: 0))
+        let data = try XCTUnwrap(PDFProcessing.imageData(of: page, dpi: 72, format: .tiff))
+        XCTAssertTrue(Array(data.prefix(4)) == [0x49, 0x49, 0x2A, 0x00] || Array(data.prefix(4)) == [0x4D, 0x4D, 0x00, 0x2A], "TIFF header")
+        XCTAssertEqual(PDFProcessing.ImageFormat.tiff.fileExtension, "tiff")
+    }
+
+    func testAdoptingABuiltDocumentMakesAnUnsavedUntitledOne() throws {
+        let model = ReaderModel()
+        model.adoptNew(try textDocument([["fresh"]]), title: "Untitled.pdf")
+        XCTAssertEqual(model.title, "Untitled.pdf")
+        XCTAssertTrue(model.isDirty)
+        XCTAssertNil(model.sourceURL)
+        XCTAssertEqual(model.pageCount, 1)
+        _ = model.discardChanges()
+    }
 }

@@ -115,7 +115,7 @@ final class ReaderModel: NSObject {
         pending = nil
     }
 
-    private func install(_ candidate: PDFDocument, url: URL, scoped: Bool, recoveredTitle: String? = nil) {
+    private func install(_ candidate: PDFDocument, url: URL?, scoped: Bool, recoveredTitle: String? = nil) {
         clearPending()
         cancelSearch()
         if let document { NotificationCenter.default.removeObserver(self, name: nil, object: document) }
@@ -131,7 +131,7 @@ final class ReaderModel: NSObject {
         updatePage()
         NotificationCenter.default.addObserver(self, selector: #selector(foundMatch(_:)), name: .PDFDocumentDidFindMatch, object: candidate)
         NotificationCenter.default.addObserver(self, selector: #selector(finishedSearch(_:)), name: .PDFDocumentDidEndFind, object: candidate)
-        if recoveredTitle == nil { addRecent(url) }
+        if recoveredTitle == nil, let url { addRecent(url) }
     }
 
     @objc private func pageChanged(_ notification: Notification) { updatePage() }
@@ -209,6 +209,8 @@ final class ReaderModel: NSObject {
     func selectAllPages() { selectedPages = Set(0..<pageCount) }
     func clearPageSelection() { selectedPages = []; selectionAnchor = nil }
 
+    func rotateTargets(by degrees: Int) { let pages = targetPages; edit { try $0.rotate(pages: pages, by: degrees) } }
+    func rotateAll(by degrees: Int) { let all = Array(0..<pageCount); edit { try $0.rotate(pages: all, by: degrees) } }
     func rotateCurrentPage() { let pages = targetPages; edit { try $0.rotate(pages: pages) } }
     func deleteCurrentPage() {
         let pages = targetPages
@@ -274,6 +276,41 @@ final class ReaderModel: NSObject {
     func undoEdit() { editWithoutHistory { try $0.undo() } }
     func redoEdit() { editWithoutHistory { try $0.redo() } }
     private func editWithoutHistory(_ operation: (PDFEditing) throws -> Void) { edit(operation) }
+    /// Shows a freshly built document as an unsaved "Untitled" document; saving always asks for a new file.
+    func adoptNew(_ built: PDFDocument, title: String) {
+        install(built, url: nil, scoped: false, recoveredTitle: title)
+        editor = PDFEditing(document: built, dirty: true)
+        revision += 1
+        saveRecoverySnapshot()
+    }
+
+    func buildDocument(_ items: [PDFBuilder.Item], sheet: PDFProcessing.PageSheet, intoCurrent: Bool, before index: Int?) {
+        do {
+            let built = try PDFBuilder.build(items, sheet: sheet)
+            if intoCurrent, editor != nil {
+                edit { try $0.insert(built, before: index) }
+                if error == nil { notice = String(format: L("已加入 %ld 頁。"), built.pageCount) }
+            } else if document == nil {
+                adoptNew(built, title: L("未命名.pdf"))
+            } else {
+                PDFWindows.shared.openNew(built, title: L("未命名.pdf"))
+            }
+        } catch { self.error = error.localizedDescription }
+    }
+
+    func insertBlankPages(count: Int, around page: Int, after: Bool, size: CGSize?) {
+        let reference = document?.page(at: page)
+        var chosen = size
+        if chosen == nil, let reference {
+            let box = reference.bounds(for: .cropBox)
+            chosen = reference.rotation % 180 != 0 ? CGSize(width: box.height, height: box.width) : box.size
+        }
+        guard let chosen else { return }
+        let start = after ? page + 1 : page
+        edit { editor in for _ in 0..<count { try editor.insertBlankPage(before: start, size: chosen) } }
+        if error == nil { goToPage(start + 1); notice = String(format: L("已插入 %ld 張空白頁。"), count) }
+    }
+
     func insertBlankPage(after: Bool) {
         let at = currentPage - 1
         edit { try $0.insertBlankPage(relativeTo: at, after: after) }

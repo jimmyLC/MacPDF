@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import PDFKit
 
 /// The sole owner of document windows, used by Finder and in-app opens alike.
 @MainActor final class PDFWindows: NSObject {
@@ -39,6 +40,18 @@ import SwiftUI
         }
     }
     private var compareControllers: [NSWindowController] = []
+
+    /// A new unsaved document built in the app (not read from a file).
+    func openNew(_ document: PDFDocument, title: String) {
+        let controller = controllers.first { controller in
+            guard let model = models[ObjectIdentifier(controller)] else { return false }
+            return model.document == nil && !model.needsPassword && model.error == nil
+        } ?? createWindow()
+        guard let model = models[ObjectIdentifier(controller)] else { return }
+        model.adoptNew(document, title: title)
+        controller.window?.title = model.title
+        if present { controller.showWindow(nil) }
+    }
 
     /// Asks for two PDFs (older first by modification date) and opens a side-by-side comparison.
     func chooseAndCompare() {

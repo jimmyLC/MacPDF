@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum M2Sheet: String, Identifiable {
-    case metadata, encrypt, compress, signature, exportImages, decorate
+    case metadata, encrypt, compress, signature, exportImages, decorate, build, blank
     var id: String { rawValue }
 }
 
@@ -279,7 +279,7 @@ struct ExportImagesSheet: View {
                 Text("範圍").tag(Scope.range)
             }.pickerStyle(.segmented)
             if scope == .range { TextField("例如 1-3, 5", text: $range).textFieldStyle(.roundedBorder) }
-            Picker("格式", selection: $format) { Text("PNG（無損）").tag(PDFProcessing.ImageFormat.png); Text("JPEG（較小）").tag(PDFProcessing.ImageFormat.jpeg) }
+            Picker("格式", selection: $format) { Text("PNG（無損）").tag(PDFProcessing.ImageFormat.png); Text("JPEG（較小）").tag(PDFProcessing.ImageFormat.jpeg); Text("TIFF").tag(PDFProcessing.ImageFormat.tiff) }
                 .pickerStyle(.segmented)
             Picker("解析度", selection: $dpi) { Text("72 dpi（螢幕）").tag(72); Text("150 dpi").tag(150); Text("300 dpi（列印）").tag(300) }
                 .pickerStyle(.segmented)
@@ -415,5 +415,138 @@ struct DecorateSheet: View {
             Toggle("首頁不加（頁碼從第二頁開始算）", isOn: $text.skipFirst)
             Toggle("偶數頁左右對調（像書本）", isOn: $text.mirror)
         }
+    }
+}
+
+struct BuildSheet: View {
+    let model: ReaderModel
+    let close: () -> Void
+    struct Entry: Identifiable { let id = UUID(); var item: PDFBuilder.Item; var ranges = "" }
+    @State private var entries: [Entry] = []
+    @State private var sheet = PDFProcessing.PageSheet.a4
+    @State private var intoCurrent = false
+    @State private var position = 0
+    @State private var picking: Kind?
+    enum Kind: Identifiable { case images, pdfs; var id: Int { self == .images ? 0 : 1 } }
+
+    private func name(_ item: PDFBuilder.Item) -> String {
+        switch item {
+        case .image(let url): "🖼 " + url.lastPathComponent
+        case .pdf(let url, _): "📄 " + url.lastPathComponent
+        case .blank: "▭ " + L("空白頁")
+        case .clipboard: "📋 " + L("剪貼簿的圖片")
+        }
+    }
+
+    var body: some View {
+        SheetFrame(title: "建立或組合 PDF", symbol: "doc.badge.plus") {
+            HStack {
+                Button("加入圖片…") { picking = .images }
+                Button("加入 PDF…") { picking = .pdfs }
+                Button("加入空白頁") { entries.append(Entry(item: .blank)) }
+                Button("加入剪貼簿圖片") { addClipboard() }.disabled(!model.pasteboardHasImage)
+            }.controlSize(.small)
+            List {
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    HStack(spacing: 6) {
+                        Text(name(entry.item)).lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        if case .pdf = entry.item {
+                            TextField("頁碼", text: $entries[index].ranges).textFieldStyle(.roundedBorder).frame(width: 90)
+                                .help("例如 1-3, 5；空白代表全部頁面")
+                        }
+                        Button { entries.swapAt(index, index - 1) } label: { Image(systemName: "chevron.up") }.disabled(index == 0)
+                        Button { entries.swapAt(index, index + 1) } label: { Image(systemName: "chevron.down") }.disabled(index == entries.count - 1)
+                        Button { entries.remove(at: index) } label: { Image(systemName: "xmark.circle.fill") }
+                    }.buttonStyle(.plain)
+                }
+            }
+            .frame(height: 170)
+            .overlay { if entries.isEmpty { Text("加入圖片、PDF 或空白頁，排好順序後建立。").font(.callout).foregroundStyle(.secondary) } }
+            Picker("圖片與空白頁的尺寸", selection: $sheet) {
+                Text("A4").tag(PDFProcessing.PageSheet.a4); Text("Letter").tag(PDFProcessing.PageSheet.letter); Text("跟圖片一樣大").tag(PDFProcessing.PageSheet.image)
+            }.pickerStyle(.segmented)
+            if model.document != nil {
+                Picker("放到", selection: $intoCurrent) { Text("新的文件").tag(false); Text("目前的文件").tag(true) }.pickerStyle(.segmented)
+                if intoCurrent {
+                    Stepper(position == 0 ? L("放在最後") : String(format: L("放在第 %ld 頁前面"), position), value: $position, in: 0...max(model.pageCount, 1))
+                }
+            }
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+                Button("建立") { create() }.keyboardShortcut(.defaultAction).prominentGlassButton().disabled(entries.isEmpty)
+            }
+        }
+        .fileImporter(isPresented: Binding(get: { picking != nil }, set: { if !$0 { picking = nil } }),
+                      allowedContentTypes: picking == .pdfs ? [.pdf] : [.image], allowsMultipleSelection: true) { result in
+            guard case .success(let urls) = result else { return }
+            for url in urls { entries.append(Entry(item: picking == .pdfs ? .pdf(url, ranges: "") : .image(url))) }
+        }
+    }
+
+    private func addClipboard() {
+        guard let image = (NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage])?.first else { return }
+        var rect = CGRect(origin: .zero, size: image.size)
+        if let cg = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) { entries.append(Entry(item: .clipboard(cg))) }
+    }
+
+    private func create() {
+        let items = entries.map { entry -> PDFBuilder.Item in
+            if case .pdf(let url, _) = entry.item { return .pdf(url, ranges: entry.ranges) }
+            return entry.item
+        }
+        let (chosenSheet, current, at) = (sheet, intoCurrent && model.document != nil, position)
+        close()
+        DispatchQueue.main.async { model.buildDocument(items, sheet: chosenSheet, intoCurrent: current, before: at == 0 ? nil : at - 1) }
+    }
+}
+
+struct BlankPageSheet: View {
+    let model: ReaderModel
+    let close: () -> Void
+    enum Size: String, CaseIterable, Identifiable { case match, a4, a5, letter, custom; var id: String { rawValue } }
+    @State private var size = Size.match
+    @State private var landscape = false
+    @State private var width = 595.0
+    @State private var height = 842.0
+    @State private var count = 1
+    @State private var place = 1
+    @State private var after = true
+
+    var body: some View {
+        SheetFrame(title: "插入空白頁", symbol: "doc.badge.plus") {
+            Stepper("張數：\(count)", value: $count, in: 1...100)
+            Stepper("位置：第 \(place) 頁的\(after ? "後面" : "前面")", value: $place, in: 1...max(model.pageCount, 1))
+            Picker("", selection: $after) { Text("前面").tag(false); Text("後面").tag(true) }.pickerStyle(.segmented).labelsHidden()
+            Picker("尺寸", selection: $size) {
+                Text("跟這一頁一樣").tag(Size.match); Text("A4").tag(Size.a4); Text("A5").tag(Size.a5); Text("Letter").tag(Size.letter); Text("自訂").tag(Size.custom)
+            }
+            if size == .custom {
+                HStack { TextField("寬（點）", value: $width, format: .number).textFieldStyle(.roundedBorder); TextField("高（點）", value: $height, format: .number).textFieldStyle(.roundedBorder) }
+            }
+            if size != .match && size != .custom { Toggle("橫向", isOn: $landscape) }
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+                Button("插入") { insert() }.keyboardShortcut(.defaultAction).prominentGlassButton()
+                    .disabled(size == .custom && (width < 20 || height < 20))
+            }
+        }
+        .onAppear { place = max(model.currentPage, 1) }
+    }
+
+    private func insert() {
+        let chosen: CGSize?
+        switch size {
+        case .match: chosen = nil
+        case .a4: chosen = landscape ? CGSize(width: 841.89, height: 595.28) : CGSize(width: 595.28, height: 841.89)
+        case .a5: chosen = landscape ? CGSize(width: 595.28, height: 419.53) : CGSize(width: 419.53, height: 595.28)
+        case .letter: chosen = landscape ? CGSize(width: 792, height: 612) : CGSize(width: 612, height: 792)
+        case .custom: chosen = CGSize(width: width, height: height)
+        }
+        let (n, page, behind) = (count, place - 1, after)
+        close()
+        DispatchQueue.main.async { model.insertBlankPages(count: n, around: page, after: behind, size: chosen) }
     }
 }

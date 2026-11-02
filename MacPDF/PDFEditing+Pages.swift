@@ -66,7 +66,7 @@ extension PDFEditing {
 // MARK: Several pages at once
 
 extension PDFEditing {
-    private static func clean(_ pages: [Int], count: Int) throws -> [Int] {
+    static func cleanPages(_ pages: [Int], count: Int) throws -> [Int] {
         let unique = Array(Set(pages)).sorted()
         guard !unique.isEmpty, unique.allSatisfy({ $0 >= 0 && $0 < count }) else { throw EditError.invalidPage }
         return unique
@@ -74,7 +74,7 @@ extension PDFEditing {
 
     func rotate(pages: [Int]) throws {
         try mutate { doc in
-            for index in try Self.clean(pages, count: doc.pageCount) {
+            for index in try Self.cleanPages(pages, count: doc.pageCount) {
                 guard let page = doc.page(at: index) else { throw EditError.invalidPage }
                 page.rotation = (page.rotation + 90) % 360
             }
@@ -83,7 +83,7 @@ extension PDFEditing {
 
     func delete(pages: [Int]) throws {
         try mutate { doc in
-            let doomed = try Self.clean(pages, count: doc.pageCount)
+            let doomed = try Self.cleanPages(pages, count: doc.pageCount)
             guard doomed.count < doc.pageCount else { throw EditError.lastPage }
             for index in doomed.reversed() { doc.removePage(at: index) }
         }
@@ -96,7 +96,7 @@ extension PDFEditing {
     func move(pages: [Int], before destination: Int) throws -> [Int] {
         var placed: [Int] = []
         try mutate { doc in
-            let moving = try Self.clean(pages, count: doc.pageCount)
+            let moving = try Self.cleanPages(pages, count: doc.pageCount)
             guard destination >= 0, destination <= doc.pageCount else { throw EditError.invalidPage }
             let objects = moving.compactMap { doc.page(at: $0) }
             guard objects.count == moving.count else { throw EditError.invalidPage }
@@ -113,7 +113,7 @@ extension PDFEditing {
     func extract(pageList: [Int], to url: URL) throws {
         guard !document.isEncrypted else { throw EditError.encryptedInput }
         guard !Self.containsSignatureField(document) else { throw EditError.signatureField }
-        let chosen = try Self.clean(pageList, count: document.pageCount)
+        let chosen = try Self.cleanPages(pageList, count: document.pageCount)
         let output = PDFDocument()
         var start = chosen[0], previous = chosen[0]
         for index in chosen.dropFirst() + [Int.max] {

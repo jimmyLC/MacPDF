@@ -58,6 +58,8 @@ struct ReaderView: View {
             case .signature: SignatureSheet(model: model) { model.sheet = nil }
             case .exportImages: ExportImagesSheet(model: model) { model.sheet = nil }
             case .decorate: DecorateSheet(model: model) { model.sheet = nil }
+            case .build: BuildSheet(model: model) { model.sheet = nil }
+            case .blank: BlankPageSheet(model: model) { model.sheet = nil }
             }
         }
         .task(id: model.notice) {
@@ -192,11 +194,18 @@ struct ReaderView: View {
         let busy = model.job != nil || model.redaction != nil
         return Menu {
             Menu("頁面", systemImage: "doc.on.doc") {
+                Button("插入空白頁…") { model.sheet = .blank }
                 Button("在這一頁前面插入空白頁") { model.insertBlankPage(after: false) }
                 Button("在這一頁後面插入空白頁") { model.insertBlankPage(after: true) }
                 Divider()
                 let many = model.targetPages.count > 1
-                Button(many ? "順時針旋轉選取的頁面" : "順時針旋轉這一頁") { model.rotateCurrentPage() }
+                Menu(many ? "旋轉選取的頁面" : "旋轉這一頁") {
+                    Button("順時針 90°") { model.rotateTargets(by: 90) }
+                    Button("逆時針 90°") { model.rotateTargets(by: -90) }
+                    Button("180°") { model.rotateTargets(by: 180) }
+                    Divider()
+                    Button("旋轉全部頁面（順時針 90°）") { model.rotateAll(by: 90) }
+                }
                 Button(many ? "向前移動選取的頁面" : "向前移動這一頁") { model.moveCurrentPage(by: -1) }.disabled((model.targetPages.first ?? 0) <= 0)
                 Button(many ? "向後移動選取的頁面" : "向後移動這一頁") { model.moveCurrentPage(by: 1) }.disabled((model.targetPages.last ?? 0) >= model.pageCount - 1)
                 Button(many ? "刪除選取的頁面" : "刪除這一頁", role: .destructive) { confirmDelete = true }.disabled(model.targetPages.count >= model.pageCount)
@@ -205,6 +214,7 @@ struct ReaderView: View {
                 Button("取消選取") { model.clearPageSelection() }.disabled(model.selectedPages.isEmpty)
             }.disabled(busy)
             Menu("插入與擷取", systemImage: "plus.rectangle.on.rectangle") {
+                Button("建立或組合 PDF…") { model.sheet = .build }
                 Button("合併 PDF 到最後…") { present(.merge) }
                 Button("從圖片新增頁面…") { present(.images) }
                 Button("擷取頁面…") { extractPages() }

@@ -69,6 +69,7 @@ struct ReaderCommands: Commands {
                 panel.allowsMultipleSelection = true
                 if panel.runModal() == .OK { PDFWindows.shared.open(panel.urls) }
             }.keyboardShortcut("o")
+            Button("建立或組合 PDF…") { PDFWindows.shared.keyModel?.sheet = .build }.keyboardShortcut("n")
             Menu("開啟最近的文件") {
                 ForEach(RecentList.shared.urls, id: \.absoluteString) { url in
                     Button(url.lastPathComponent) { PDFWindows.shared.open([url]) }

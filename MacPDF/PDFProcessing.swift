@@ -260,9 +260,9 @@ enum PDFProcessing {
 
 extension PDFProcessing {
     enum ImageFormat: String, CaseIterable, Identifiable {
-        case png, jpeg
+        case png, jpeg, tiff
         var id: String { rawValue }
-        var fileExtension: String { self == .png ? "png" : "jpg" }
+        var fileExtension: String { switch self { case .png: "png"; case .jpeg: "jpg"; case .tiff: "tiff" } }
     }
 
     /// Longest side allowed for a rendered page, as docs/05 section 6.2 limits it.
@@ -284,6 +284,7 @@ extension PDFProcessing {
         switch format {
         case .png: return rep.representation(using: .png, properties: [:])
         case .jpeg: return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+        case .tiff: return rep.representation(using: .tiff, properties: [.compressionMethod: NSBitmapImageRep.TIFFCompression.lzw.rawValue])
         }
     }
 

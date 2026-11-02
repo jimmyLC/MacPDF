@@ -225,6 +225,20 @@ struct ReaderView: View {
                 Button("儲存加密副本…") { model.sheet = .encrypt }
                 Button("儲存無密碼副本…") { model.exportUnlockedCopy() }.disabled(!(model.document?.isEncrypted ?? false))
             }.disabled(busy)
+            Menu("檢視", systemImage: "rectangle.split.2x1") {
+                ForEach(ViewMode.allCases) { mode in
+                    Button { model.setViewMode(mode) } label: { Label(mode.label, systemImage: model.viewMode == mode ? "checkmark" : "") }
+                }
+                Divider()
+                Button("符合頁面") { model.fitPage() }
+                Button("符合寬度") { model.fitWidth() }
+                Button("實際大小") { model.actualSize() }
+            }
+            Menu("分享與拷貝", systemImage: "square.and.arrow.up") {
+                Button("分享…") { model.share(from: model.pdfView) }
+                Button("拷貝這一頁為圖片") { model.copyCurrentPageAsImage() }
+                Button("貼上圖片為新頁") { model.pasteImageAsPage() }.disabled(!model.pasteboardHasImage)
+            }
             Divider()
             Button("復原") { model.undoEdit() }.keyboardShortcut("z").disabled(!model.canUndo || busy)
             Button("重做") { model.redoEdit() }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!model.canRedo || busy)
@@ -436,6 +450,20 @@ struct SidebarPanel: View {
             .padding(.horizontal, 12).frame(height: 32)
             .background(Capsule().fill(Color.primary.opacity(0.08)))
             .padding(.horizontal, 12)
+            HStack(spacing: 6) {
+                Toggle("Aa", isOn: Binding(get: { model.searchCaseSensitive }, set: { model.searchCaseSensitive = $0; if !search.isEmpty { model.find(search) } }))
+                    .toggleStyle(.button).controlSize(.small).help("區分大小寫").accessibilityLabel("區分大小寫")
+                Toggle("全字", isOn: Binding(get: { model.searchWholeWord }, set: { model.searchWholeWord = $0; if !search.isEmpty { model.find(search) } }))
+                    .toggleStyle(.button).controlSize(.small).help("只找完整的字").accessibilityLabel("只找完整的字")
+                Spacer()
+                if !model.results.isEmpty {
+                    Text("\((model.resultIndex ?? -1) + 1) / \(model.results.count)").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                }
+                Button { model.previousResult() } label: { Image(systemName: "chevron.up") }
+                    .buttonStyle(.plain).disabled(model.results.isEmpty).help("上一筆").accessibilityLabel("上一筆")
+                Button { model.nextResult() } label: { Image(systemName: "chevron.down") }
+                    .buttonStyle(.plain).disabled(model.results.isEmpty).help("下一筆").accessibilityLabel("下一筆")
+            }.padding(.horizontal, 14)
             if model.isSearching {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small); Text("搜尋中…").font(.callout)
@@ -451,7 +479,7 @@ struct SidebarPanel: View {
                         Text(model.resultTitle(index)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.plain)
-                    .listRowBackground(Color.clear)
+                    .listRowBackground(model.resultIndex == index ? Color.accentColor.opacity(0.18) : Color.clear)
                 }
                 .scrollContentBackground(.hidden)
             }

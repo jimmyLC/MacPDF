@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 struct MacPDFApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     var body: some Scene {
-        Settings { EmptyView() }
+        Settings { SettingsView() }
             .commands { ReaderCommands() }
     }
 }
@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             PDFWindows.shared.compare(old: URL(fileURLWithPath: pair[0]), new: URL(fileURLWithPath: pair[1]))
         }
         #endif
+        Preferences.applyAppearance()
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
         PDFWindows.shared.showWelcomeIfNeeded()
@@ -68,8 +69,37 @@ struct ReaderCommands: Commands {
                 panel.allowsMultipleSelection = true
                 if panel.runModal() == .OK { PDFWindows.shared.open(panel.urls) }
             }.keyboardShortcut("o")
+            Menu("開啟最近的文件") {
+                ForEach(RecentList.shared.urls, id: \.absoluteString) { url in
+                    Button(url.lastPathComponent) { PDFWindows.shared.open([url]) }
+                }
+                Divider()
+                Button("清除記錄") { PDFWindows.shared.keyModel?.clearRecents() ?? ReaderModel.clearAllRecents() }
+                    .disabled(RecentList.shared.urls.isEmpty)
+            }
+            Divider()
+            Button("分享…") { if let model = PDFWindows.shared.keyModel { model.share(from: model.pdfView) } }
+            Divider()
             Button("比較兩份 PDF…") { PDFWindows.shared.chooseAndCompare() }
             Button("批次處理…") { PDFWindows.shared.openBatch() }
+        }
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            Button("尋找下一個") { PDFWindows.shared.keyModel?.nextResult() }.keyboardShortcut("g")
+            Button("尋找上一個") { PDFWindows.shared.keyModel?.previousResult() }.keyboardShortcut("g", modifiers: [.command, .shift])
+            Divider()
+            Button("拷貝這一頁為圖片") { PDFWindows.shared.keyModel?.copyCurrentPageAsImage() }.keyboardShortcut("c", modifiers: [.command, .shift])
+            Button("貼上圖片為新頁") { PDFWindows.shared.keyModel?.pasteImageAsPage() }.keyboardShortcut("v", modifiers: [.command, .shift])
+        }
+        CommandGroup(replacing: .toolbar) {
+            Button("單頁") { PDFWindows.shared.keyModel?.setViewMode(.single) }.keyboardShortcut("1", modifiers: [.command, .option])
+            Button("連續捲動") { PDFWindows.shared.keyModel?.setViewMode(.continuous) }.keyboardShortcut("2", modifiers: [.command, .option])
+            Button("雙頁") { PDFWindows.shared.keyModel?.setViewMode(.twoUp) }.keyboardShortcut("3", modifiers: [.command, .option])
+            Button("雙頁連續") { PDFWindows.shared.keyModel?.setViewMode(.twoUpContinuous) }.keyboardShortcut("4", modifiers: [.command, .option])
+            Divider()
+            Button("符合頁面") { PDFWindows.shared.keyModel?.fitPage() }
+            Button("符合寬度") { PDFWindows.shared.keyModel?.fitWidth() }.keyboardShortcut("9", modifiers: [.command, .option])
+            Button("實際大小") { PDFWindows.shared.keyModel?.actualSize() }.keyboardShortcut("0", modifiers: [.command, .option])
         }
         CommandMenu("文件") {
             Button("文字辨識（OCR）") { PDFWindows.shared.keyModel?.runOCR() }
@@ -90,4 +120,15 @@ struct ReaderCommands: Commands {
 @MainActor final class OpenDocuments {
     static let shared = OpenDocuments()
     let models = NSHashTable<ReaderModel>.weakObjects()
+}
+
+/// The recent-documents list for the File menu, refreshed whenever any window changes it.
+@MainActor @Observable final class RecentList {
+    static let shared = RecentList()
+    private(set) var urls: [URL] = ReaderModel.recentURLs()
+    init() {
+        NotificationCenter.default.addObserver(forName: .macpdfRecentsChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.urls = ReaderModel.recentURLs() }
+        }
+    }
 }

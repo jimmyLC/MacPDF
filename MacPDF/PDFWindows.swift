@@ -100,6 +100,9 @@ import SwiftUI
         window.minSize = NSSize(width: 780, height: 520)
         window.contentViewController = NSHostingController(rootView: ReaderView(model: model) { [weak self] url in self?.open([url]) })
         window.setContentSize(NSSize(width: 1100, height: 760))
+        window.tabbingIdentifier = "MacPDF.document"
+        let wantsTabs = UserDefaults.standard.bool(forKey: Preferences.tabsKey)
+        window.tabbingMode = wantsTabs ? .preferred : .disallowed
         let controller = NSWindowController(window: window)
         controllers.append(controller)
         models[ObjectIdentifier(controller)] = model

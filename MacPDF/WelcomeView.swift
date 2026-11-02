@@ -65,18 +65,22 @@ struct WelcomeView: View {
     }
 
     private var recentCard: some View {
-        card(title: "最近開啟", symbol: "clock") {
+        card(title: "最近開啟", symbol: "clock", trailing: AnyView(Button("清除記錄") { model.clearRecents() }.controlSize(.small))) {
             ForEach(Array(model.recents.prefix(6)), id: \.absoluteString) { url in
                 RecentRow(url: url) { model.openRecent(url) }
             }
         }
     }
 
-    private func card<Rows: View>(title: LocalizedStringKey, symbol: String, @ViewBuilder rows: () -> Rows) -> some View {
+    private func card<Rows: View>(title: LocalizedStringKey, symbol: String, trailing: AnyView? = nil, @ViewBuilder rows: () -> Rows) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: symbol)
-                .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
-                .padding(.horizontal, 10).padding(.bottom, 4)
+            HStack {
+                Label(title, systemImage: symbol)
+                    .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                Spacer()
+                trailing
+            }
+            .padding(.horizontal, 10).padding(.bottom, 4)
             rows()
         }
         .padding(12)

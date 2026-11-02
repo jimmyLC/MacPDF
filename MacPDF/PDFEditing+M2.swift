@@ -103,11 +103,18 @@ extension PDFEditing {
 
     // MARK: Images
 
-    func appendImages(_ urls: [URL]) throws {
-        let pages = urls.compactMap { PDFProcessing.page(fromImageAt: $0) }
+    func appendImages(_ urls: [URL], sheet: PDFProcessing.PageSheet = .a4) throws {
+        let pages = urls.compactMap { PDFProcessing.page(fromImageAt: $0, sheet: sheet) }
+        guard !pages.isEmpty else { throw EditError.cannotSerialize }
+        try appendPages(pages)
+    }
+
+    /// Adds ready-made pages at the end (or in front of `index`).
+    func appendPages(_ pages: [PDFPage], before index: Int? = nil) throws {
         guard !pages.isEmpty else { throw EditError.cannotSerialize }
         try mutate { doc in
-            for page in pages { doc.insert(page, at: doc.pageCount) }
+            let at = min(max(index ?? doc.pageCount, 0), doc.pageCount)
+            for (offset, page) in pages.enumerated() { doc.insert(page, at: at + offset) }
         }
         reparse()
     }

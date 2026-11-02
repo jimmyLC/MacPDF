@@ -175,21 +175,41 @@ enum PDFProcessing {
 
     // MARK: Images to pages
 
-    /// Fits the image on an A4-sized page (portrait or landscape) and embeds it as JPEG.
-    static func page(fromImageAt url: URL) -> PDFPage? {
+    enum PageSheet: String, CaseIterable, Identifiable {
+        case a4, letter, image
+        var id: String { rawValue }
+        /// Portrait size in points; `image` has none because the page takes the picture's own shape.
+        var portrait: CGSize? {
+            switch self { case .a4: CGSize(width: 595.28, height: 841.89); case .letter: CGSize(width: 612, height: 792); case .image: nil }
+        }
+    }
+
+    /// Fits the image on a page (portrait or landscape to match the picture) and embeds it as JPEG.
+    static func page(fromImageAt url: URL, sheet: PageSheet = .a4) -> PDFPage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
                                         kCGImageSourceCreateThumbnailWithTransform: true,
                                         kCGImageSourceThumbnailMaxPixelSize: 3508]
-        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary),
-              let jpeg = jpegImage(from: cg, quality: 0.9) else { return nil }
-        let a4 = CGSize(width: 595.28, height: 841.89)
-        let landscape = cg.width > cg.height
-        let sheet = landscape ? CGSize(width: a4.height, height: a4.width) : a4
-        let fit = min(sheet.width / CGFloat(cg.width), sheet.height / CGFloat(cg.height))
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return page(fromImage: cg, sheet: sheet)
+    }
+
+    static func page(fromImage cg: CGImage, sheet: PageSheet = .a4) -> PDFPage? {
+        guard let jpeg = jpegImage(from: cg, quality: 0.9) else { return nil }
+        let size: CGSize
+        if let portrait = sheet.portrait {
+            let landscape = cg.width > cg.height
+            size = landscape ? CGSize(width: portrait.height, height: portrait.width) : portrait
+        } else {
+            // One pixel per point would be huge; scale so the long side is about A4.
+            let long = max(cg.width, cg.height)
+            let scale = min(1, 842 / CGFloat(long))
+            size = CGSize(width: CGFloat(cg.width) * scale, height: CGFloat(cg.height) * scale)
+        }
+        let fit = min(size.width / CGFloat(cg.width), size.height / CGFloat(cg.height))
         let drawn = CGSize(width: CGFloat(cg.width) * fit, height: CGFloat(cg.height) * fit)
-        let rect = CGRect(x: (sheet.width - drawn.width) / 2, y: (sheet.height - drawn.height) / 2, width: drawn.width, height: drawn.height)
-        guard let data = pdfData(size: sheet, draw: { $0.draw(jpeg, in: rect) }),
+        let rect = CGRect(x: (size.width - drawn.width) / 2, y: (size.height - drawn.height) / 2, width: drawn.width, height: drawn.height)
+        guard let data = pdfData(size: size, draw: { $0.draw(jpeg, in: rect) }),
               let document = PDFDocument(data: data) else { return nil }
         return document.page(at: 0)?.copy() as? PDFPage
     }

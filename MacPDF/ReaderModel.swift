@@ -24,6 +24,11 @@ final class ReaderModel: NSObject {
     let signatures = SignatureStore()
     private(set) var isPlacingAnnotation = false
     private(set) var isSearching = false
+    var searchCaseSensitive = false
+    var searchWholeWord = false
+    private(set) var resultIndex: Int?
+    private var searchTask: Task<Void, Never>?
+    var viewMode = ViewMode.continuous
     private(set) var hasSearched = false
     private(set) var currentPage = 0
     /// Thumbnail selection, zero-based page indices.
@@ -35,7 +40,8 @@ final class ReaderModel: NSObject {
     private var activeURL: URL?
     private var displayName: String?
     private var activeScoped = false
-    private let recentKey = "recentPDFBookmarks"
+    static let recentKey = "recentPDFBookmarks"
+    private var recentKey: String { Self.recentKey }
     private var recoveryID = UUID()
     private let recovery = RecoveryStore()
     private(set) var recoveryEntries: [RecoveryEntry] = []
@@ -67,6 +73,7 @@ final class ReaderModel: NSObject {
         NotificationCenter.default.addObserver(self, selector: #selector(pageChanged(_:)), name: .PDFViewPageChanged, object: pdfView)
         NotificationCenter.default.addObserver(self, selector: #selector(annotationHit(_:)), name: .PDFViewAnnotationHit, object: pdfView)
         loadRecents()
+        NotificationCenter.default.addObserver(self, selector: #selector(recentsChanged(_:)), name: .macpdfRecentsChanged, object: nil)
         recoveryEntries = recovery.entries()
     }
 
@@ -401,20 +408,46 @@ final class ReaderModel: NSObject {
         catch { self.error = String(format: L("無法刪除恢復檔：%@"), error.localizedDescription) }
     }
 
+    /// Searches page by page so large files stay responsive and the search can be stopped.
     func find(_ query: String) {
         cancelSearch()
-        results = []
+        results = []; resultIndex = nil
         hasSearched = false
-        guard let document, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        hasSearched = true
-        isSearching = true
-        document.beginFindString(query, withOptions: .caseInsensitive)
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let document, !trimmed.isEmpty else { return }
+        var pattern = NSRegularExpression.escapedPattern(for: trimmed)
+        if searchWholeWord { pattern = "(?<![\\p{L}\\p{N}])" + pattern + "(?![\\p{L}\\p{N}])" }
+        guard let expression = try? NSRegularExpression(pattern: pattern, options: searchCaseSensitive ? [] : [.caseInsensitive]) else { return }
+        hasSearched = true; isSearching = true
+        searchTask = Task { [weak self] in
+            for index in 0..<document.pageCount {
+                guard !Task.isCancelled, let self else { return }
+                if let page = document.page(at: index), let text = page.string, !text.isEmpty {
+                    let whole = NSRange(location: 0, length: (text as NSString).length)
+                    for match in expression.matches(in: text, range: whole) where match.range.length > 0 {
+                        if let selection = page.selection(for: match.range) { self.results.append(selection) }
+                    }
+                }
+                if index % 10 == 9 { await Task.yield() }
+            }
+            self?.isSearching = false
+            self?.searchTask = nil
+        }
     }
 
     func cancelSearch() {
         if isSearching { hasSearched = false }
+        searchTask?.cancel(); searchTask = nil
         document?.cancelFindString()
         isSearching = false
+    }
+
+    func nextResult() { step(1) }
+    func previousResult() { step(-1) }
+    private func step(_ direction: Int) {
+        guard !results.isEmpty else { return }
+        let next = ((resultIndex ?? (direction > 0 ? -1 : 0)) + direction + results.count) % results.count
+        goToResult(next)
     }
 
     @objc private func foundMatch(_ notification: Notification) {
@@ -436,6 +469,7 @@ final class ReaderModel: NSObject {
 
     func goToResult(_ index: Int) {
         guard results.indices.contains(index) else { return }
+        resultIndex = index
         let result = results[index]; pdfView.setCurrentSelection(result, animate: true); pdfView.go(to: result)
     }
 
@@ -546,6 +580,8 @@ final class ReaderModel: NSObject {
         if !words.isEmpty { values[.keywordsAttribute] = words }
         edit { try $0.setMetadata(values) }
     }
+
+    func appendPages(_ pages: [PDFPage]) { edit { try $0.appendPages(pages) } }
 
     func appendImages(_ urls: [URL]) {
         let scoped = urls.map { ($0, $0.startAccessingSecurityScopedResource()) }
@@ -681,13 +717,24 @@ final class ReaderModel: NSObject {
         }
     }
 
-    private func loadRecents() {
+    func clearRecents() {
+        UserDefaults.standard.removeObject(forKey: recentKey)
+        NotificationCenter.default.post(name: .macpdfRecentsChanged, object: nil)
+    }
+    @objc private func recentsChanged(_ note: Notification) { loadRecents() }
+
+    static func recentURLs() -> [URL] {
         let entries = UserDefaults.standard.array(forKey: recentKey) as? [Data] ?? []
-        recents = entries.compactMap { data in
+        return entries.compactMap { data in
             var stale = false
             return try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale)
         }
     }
+    static func clearAllRecents() {
+        UserDefaults.standard.removeObject(forKey: recentKey)
+        NotificationCenter.default.post(name: .macpdfRecentsChanged, object: nil)
+    }
+    private func loadRecents() { recents = Self.recentURLs() }
 
     private func addRecent(_ url: URL) {
         guard let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
@@ -698,6 +745,8 @@ final class ReaderModel: NSObject {
         }
         entries.insert(bookmark, at: 0)
         UserDefaults.standard.set(Array(entries.prefix(8)), forKey: recentKey)
-        loadRecents()
+        NotificationCenter.default.post(name: .macpdfRecentsChanged, object: nil)
     }
 }
+
+extension Notification.Name { static let macpdfRecentsChanged = Notification.Name("macpdfRecentsChanged") }

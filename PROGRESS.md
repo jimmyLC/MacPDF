@@ -15,6 +15,8 @@ Updated: 2026-11-02 (Asia/Singapore). M1 is an internal candidate; acceptance is
 
 - Debug builds honour `MACPDF_APPEARANCE=light|dark` to check both appearances without changing the system setting (`open --env MACPDF_APPEARANCE=light -a MacPDF.app`).
 
+- M3 manual redaction (rasterize, with verification before save) is on branch `m3-redaction`; see `docs/11-implementation-plan.md`.
+
 ## Verification
 
 - `python3 scripts/accept-m1.py`: 16 passed, 0 failed, 1 skipped on Apple Silicon/macOS 27; the skipped test requires a mounted isolated external test volume. Full local evidence is in ignored `build/acceptance/`.

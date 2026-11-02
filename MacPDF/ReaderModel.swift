@@ -37,6 +37,7 @@ final class ReaderModel: NSObject {
     private(set) var hasFormFields = false
     var notice: String?
     var sheet: M2Sheet?
+    private(set) var redaction: RedactionSession?
     private var jobTask: Task<Void, Never>?
     private var formSnapshotTask: Task<Void, Never>?
 
@@ -45,6 +46,7 @@ final class ReaderModel: NSObject {
     override init() {
         pdfView = ReaderPDFView()
         super.init()
+        pdfView.onRedactRect = { [weak self] page, rect in self?.addManualMark(page: page, rect: rect) }
         pdfView.onInk = { [weak self] page, points in self?.addInk(page: page, points: points) }
         pdfView.onPlacement = { [weak self] page, point in self?.placeAnnotation(page: page, point: point) }
         pdfView.autoScales = true
@@ -141,7 +143,7 @@ final class ReaderModel: NSObject {
     }
 
     private func edit(_ operation: (PDFEditing) throws -> Void) {
-        guard let editor else { return }
+        guard let editor, redaction == nil else { return }
         let oldPage = currentPage
         do {
             try operation(editor)
@@ -211,7 +213,7 @@ final class ReaderModel: NSObject {
         edit { try $0.annotate(page: page, bounds: bounds, text: text, freeText: freeText) }
     }
     func saveCopy(to url: URL) {
-        guard let editor else { return }
+        guard let editor, redaction == nil else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
@@ -223,14 +225,14 @@ final class ReaderModel: NSObject {
     }
 
     func extractPages(_ range: ClosedRange<Int>, to url: URL) {
-        guard let editor else { return }
+        guard let editor, redaction == nil else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { try editor.extract(pages: range, to: url) }
         catch { self.error = error.localizedDescription }
     }
     func printDocument() {
-        guard let document else { return }
+        guard let document, redaction == nil else { return }
         guard let operation = document.printOperation(for: NSPrintInfo.shared, scalingMode: .pageScaleDownToFit, autoRotate: true) else {
             error = L("無法建立列印工作。"); return
         }
@@ -244,6 +246,7 @@ final class ReaderModel: NSObject {
         } catch { self.error = String(format: L("無法刪除恢復檔：%@"), error.localizedDescription); return false }
     }
     func saveCopyWithPanel() {
+        guard redaction == nil else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = "MacPDF-副本.pdf"
@@ -419,7 +422,7 @@ final class ReaderModel: NSObject {
     }
 
     func exportEncryptedCopy(userPassword: String, ownerPassword: String, permissions: PDFEditing.Permissions) {
-        guard let editor, let url = choosePDFDestination(suggested: "MacPDF-加密.pdf") else { return }
+        guard let editor, redaction == nil, let url = choosePDFDestination(suggested: "MacPDF-加密.pdf") else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { try editor.exportEncrypted(to: url, userPassword: userPassword, ownerPassword: ownerPassword, permissions: permissions); notice = L("已儲存加密副本。") }
@@ -427,19 +430,122 @@ final class ReaderModel: NSObject {
     }
 
     func exportUnlockedCopy() {
-        guard let editor, let url = choosePDFDestination(suggested: "MacPDF-無密碼.pdf") else { return }
+        guard let editor, redaction == nil, let url = choosePDFDestination(suggested: "MacPDF-無密碼.pdf") else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { try editor.exportUnlocked(to: url); notice = L("已儲存無密碼副本。") }
         catch { self.error = error.localizedDescription }
     }
 
-    private func choosePDFDestination(suggested: String) -> URL? {
+    func choosePDFDestination(suggested: String) -> URL? {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = suggested
         panel.message = L("請選擇新的檔名；MacPDF 不會覆寫現有檔案。")
         return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    // MARK: M3 redaction
+
+    func beginRedaction() {
+        guard document != nil, redaction == nil, job == nil else { return }
+        guard let editor, !editor.document.isEncrypted else { error = L("加密的 PDF 無法塗黑。請先儲存無密碼副本。"); return }
+        guard !PDFEditing.containsSignatureField(editor.document) else { error = PDFEditing.EditError.signatureField.localizedDescription; return }
+        cancelAnnotationPlacement(); setInkMode(false)
+        redaction = RedactionSession()
+    }
+
+    func endRedaction() {
+        if let document { Redaction.clearOverlays(in: document) }
+        redaction = nil; pdfView.redactDrawing = false
+    }
+
+    func setRedactDrawing(_ enabled: Bool) {
+        redaction?.drawing = enabled
+        pdfView.redactDrawing = enabled
+        if enabled { cancelAnnotationPlacement(); setInkMode(false) }
+    }
+
+    private func addMarks(_ marks: [RedactionMark]) {
+        guard let document, let redaction else { return }
+        for mark in marks {
+            let duplicate = redaction.marks.contains { $0.page == mark.page && $0.rect.insetBy(dx: -1, dy: -1).contains(mark.rect) && mark.source != .manual }
+            if duplicate { continue }
+            redaction.marks.append(mark); Redaction.show(mark, on: document)
+        }
+    }
+
+    private func addManualMark(page: Int, rect: CGRect) {
+        addMarks([RedactionMark(page: page, rect: rect, text: L("手動框選"), source: .manual)])
+    }
+
+    func scanRedaction() {
+        guard let document, let redaction else { return }
+        let keywords = redaction.keywords.split(whereSeparator: { ",，;；\n".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }
+        do {
+            let found = try Redaction.find(in: document, keywords: keywords, kinds: redaction.kinds, regex: redaction.regex.isEmpty ? nil : redaction.regex)
+            let before = redaction.marks.count
+            addMarks(found)
+            redaction.scanned = true
+            redaction.lastFound = redaction.marks.count - before
+        } catch { self.error = L("自訂規則不是有效的規則運算式。") }
+    }
+
+    func removeMark(_ id: UUID) {
+        guard let document, let redaction else { return }
+        redaction.marks.removeAll { $0.id == id }
+        Redaction.removeOverlay(for: id, in: document)
+    }
+
+    func clearMarks() {
+        guard let document, let redaction else { return }
+        redaction.marks.removeAll(); Redaction.clearOverlays(in: document)
+    }
+
+    func goToMark(_ mark: RedactionMark) {
+        guard let page = document?.page(at: mark.page) else { return }
+        pdfView.go(to: PDFDestination(page: page, at: CGPoint(x: mark.rect.minX, y: mark.rect.maxY + 40)))
+    }
+
+    /// Builds, verifies and only then asks where to save. Nothing is written when verification fails.
+    func applyRedaction() {
+        guard let document, let redaction, jobTask == nil, !redaction.marks.isEmpty else { return }
+        let marks = redaction.marks
+        let pages = Set(marks.map(\.page)).count
+        Redaction.clearOverlays(in: document)
+        job = JobProgress(title: L("塗黑處理中"), done: 0, total: pages)
+        jobTask = Task { [weak self] in
+            let built = await Redaction.build(from: document, marks: marks) { done, _ in self?.job?.done = done }
+            guard let self else { return }
+            let cancelled = self.jobTask?.isCancelled ?? false
+            self.job = nil; self.jobTask = nil
+            guard !cancelled else { marks.forEach { Redaction.show($0, on: document) }; self.notice = L("已取消塗黑。"); return }
+            guard let built, built.pageCount == document.pageCount else {
+                marks.forEach { Redaction.show($0, on: document) }
+                self.error = L("塗黑失敗，原始檔沒有被修改。"); return
+            }
+            let report = Redaction.verify(built, source: document, marks: marks)
+            guard report.passed else {
+                marks.forEach { Redaction.show($0, on: document) }
+                self.error = String(format: L("驗證沒有通過：第 %@ 頁可能仍有文字或區域未塗黑。沒有儲存任何檔案，請手動檢查。"),
+                                    report.failedPages.map(String.init).joined(separator: "、"))
+                return
+            }
+            guard let url = self.choosePDFDestination(suggested: "MacPDF-塗黑.pdf") else {
+                marks.forEach { Redaction.show($0, on: document) }; return
+            }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let data = built.dataRepresentation() else { marks.forEach { Redaction.show($0, on: document) }; self.error = L("塗黑失敗，原始檔沒有被修改。"); return }
+            do {
+                try PDFEditing.writeNew(data: data, to: url)
+                self.endRedaction()
+                self.notice = String(format: L("%ld 頁、%ld 個區域已永久移除，驗證通過。原始檔沒有被修改。"), report.pages, report.regions)
+            } catch {
+                marks.forEach { Redaction.show($0, on: document) }
+                self.error = error.localizedDescription
+            }
+        }
     }
 
     private func loadRecents() {

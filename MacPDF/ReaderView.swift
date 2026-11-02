@@ -109,6 +109,12 @@ struct ReaderView: View {
                 }
             }
             topBar
+            if let session = model.redaction {
+                RedactionPanel(model: model, session: session)
+                    .padding(.trailing, 12).padding(.top, barTop + barHeight + 8).padding(.bottom, 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
             VStack(spacing: 8) {
                 if model.isPlacingAnnotation { placementBanner }
                 if let job = model.job { jobBanner(job) }
@@ -118,6 +124,7 @@ struct ReaderView: View {
             .transition(.move(edge: .top).combined(with: .opacity))
         }
         .animation(.smooth(duration: 0.28), value: sidebar)
+        .animation(.smooth(duration: 0.28), value: model.redaction != nil)
         .animation(.smooth(duration: 0.25), value: model.isPlacingAnnotation)
         .animation(.smooth(duration: 0.25), value: model.job != nil)
         .animation(.smooth(duration: 0.25), value: model.notice)
@@ -152,10 +159,10 @@ struct ReaderView: View {
                     selection = .search; sidebar = true; searchFocused = true
                 }
                 GlassDivider()
-                GlassIconButton(symbol: "arrow.uturn.backward", label: "復原") { model.undoEdit() }.disabled(!model.canUndo)
-                GlassIconButton(symbol: "arrow.uturn.forward", label: "重做") { model.redoEdit() }.disabled(!model.canRedo)
+                GlassIconButton(symbol: "arrow.uturn.backward", label: "復原") { model.undoEdit() }.disabled(!model.canUndo || model.redaction != nil)
+                GlassIconButton(symbol: "arrow.uturn.forward", label: "重做") { model.redoEdit() }.disabled(!model.canRedo || model.redaction != nil)
                 GlassDivider()
-                GlassIconButton(symbol: "square.and.arrow.down", label: "另存新檔") { model.saveCopyWithPanel() }
+                GlassIconButton(symbol: "square.and.arrow.down", label: "另存新檔") { model.saveCopyWithPanel() }.disabled(model.redaction != nil)
                 moreMenu
             }
         }
@@ -176,7 +183,7 @@ struct ReaderView: View {
     }
 
     private var moreMenu: some View {
-        let busy = model.job != nil
+        let busy = model.job != nil || model.redaction != nil
         return Menu {
             Menu("頁面", systemImage: "doc.on.doc") {
                 Button("順時針旋轉這一頁") { model.rotateCurrentPage() }
@@ -197,6 +204,7 @@ struct ReaderView: View {
                 Button("清除表單欄位") { model.resetForm() }
                 Button("扁平化表單") { model.flattenForms() }
             }.disabled(busy || !model.hasFormFields)
+            Button("塗黑敏感資訊…", systemImage: "rectangle.dashed.badge.record") { model.beginRedaction() }.disabled(busy)
             Menu("文件資訊與保護", systemImage: "lock.shield") {
                 Button("編輯文件資訊…") { model.sheet = .metadata }
                 Button("儲存加密副本…") { model.sheet = .encrypt }

@@ -45,3 +45,5 @@ Manual on 2026-11-02 (macOS 27, Apple Silicon, dark mode, desktop driver): Docum
 ## Compatibility envelope
 
 Apple Silicon runtime tested on the development Mac. Intel is out of scope (Apple Silicon only). Compilation does not prove macOS 14 compatibility. Network/exFAT volumes, malformed PDFs and a representative large-document corpus have no general compatibility claim. Encrypted/signature-field document editing remains unsupported. These are explicit limitations, not passed acceptance items.
+
+M3 (2026-11-03): `Tests/M3Tests.swift` (7 tests) covers PII finding and check digits, keyword/regex, a rebuilt page carrying no text/annotations/metadata/outline/link URL in the file bytes, a failed verification, a rotated page, a drawn box on a picture, and overlay cleanup. Full suite: 35 tests, 0 failures, 1 skipped. By hand (macOS 27): drawn a box, listed it, confirmed the warning, saved; the saved file has one page, no text, no annotations and a dark region. Keyword/PII search through the panel was not driven by hand (typing into the panel fields through the desktop driver was unreliable). Independent security testing is still outstanding.

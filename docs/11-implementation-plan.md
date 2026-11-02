@@ -31,6 +31,17 @@ Implemented (all undoable, all produce a new file only when saved):
 
 Not implemented: PDF/A, extracting embedded images, image crop/contrast editing, scanner import, Dock menu, window-position memory. OCR accuracy on real scans (skew, noise, handwriting, mixed languages) is unmeasured; the automated tests use clean generated text.
 
+## M3 implementation and limitations
+
+Manual redaction follows the v1 (rasterize) guarantee in `docs/05-security-privacy.md` section 5.2.
+
+- Candidates come from keywords, a custom regular expression, and PII presets (email, card with Luhn check, phone, SSN, IBAN with mod-97 check, IP, date, Taiwan ID with check digit), plus hand-drawn boxes. Candidates are only suggestions; nothing is removed until the user applies.
+- Applying rebuilds every marked page as a flat picture at 200 dpi with the black boxes burned into the pixels before embedding. Annotations, links, form fields and text on those pages are gone. The output has no document info, outline or attachments. Unmarked pages are copied unchanged.
+- The output is reopened and checked before the save panel appears: marked pages must have no text and no annotations, and each box centre must render dark. If any check fails nothing is written. The source file is never modified and the new file is created exclusively.
+- Not done: postal codes (too many false positives), mosaic/text mark styles, content-stream (v2) redaction, restricting to chosen pages, the independent security test the roadmap gates M3 on. Do not rely on it for truly sensitive documents until that test is done.
+- Encrypted PDFs and PDFs with signature fields are refused. Unmarked pages keep their annotations and any actions on them.
+- Marked regions are PDF annotations while reviewing. Save, print and undo are disabled during review so they cannot leak into another file.
+
 ## Verification and outstanding work
 
 - Signed, sandbox-enabled Apple Silicon debug build and automated tests pass on the development Mac.

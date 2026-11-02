@@ -72,6 +72,8 @@ struct ReaderCommands: Commands {
             Button("清除表單欄位") { PDFWindows.shared.keyModel?.resetForm() }
             Button("扁平化表單") { PDFWindows.shared.keyModel?.flattenForms() }
             Divider()
+            Button("塗黑敏感資訊…") { PDFWindows.shared.keyModel?.beginRedaction() }
+            Divider()
             Button("編輯文件資訊…") { PDFWindows.shared.keyModel?.sheet = .metadata }
             Button("儲存加密副本…") { PDFWindows.shared.keyModel?.sheet = .encrypt }
             Button("儲存無密碼副本…") { PDFWindows.shared.keyModel?.exportUnlockedCopy() }

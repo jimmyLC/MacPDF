@@ -3,6 +3,9 @@ import PDFKit
 
 final class ReaderPDFView: PDFView {
     var inkMode = false
+    var redactDrawing = false
+    var onRedactRect: ((Int, CGRect) -> Void)?
+    private var redactStart: (PDFPage, CGPoint)?
     var onPlacement: ((Int, CGPoint) -> Void)?
     var placingAnnotation = false
     var onInk: ((Int, [CGPoint]) -> Void)?
@@ -68,18 +71,32 @@ final class ReaderPDFView: PDFView {
             onPlacement?(index, convert(location, to: page))
             return
         }
+        if redactDrawing {
+            guard let page = page(for: location, nearest: false) else { return }
+            redactStart = (page, convert(location, to: page)); return
+        }
         guard inkMode else { super.mouseDown(with: event); return }
         guard let page = page(for: location, nearest: false) else { return }
         strokePage = page
         stroke = [convert(location, to: page)]
     }
     override func mouseDragged(with event: NSEvent) {
+        if redactDrawing { return }
         guard inkMode else { super.mouseDragged(with: event); return }
         guard let page = strokePage else { return }
         let location = convert(event.locationInWindow, from: nil)
         stroke.append(convert(location, to: page))
     }
     override func mouseUp(with event: NSEvent) {
+        if redactDrawing {
+            defer { redactStart = nil }
+            guard let (page, start) = redactStart, let document else { return }
+            let end = convert(convert(event.locationInWindow, from: nil), to: page)
+            let rect = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(start.x - end.x), height: abs(start.y - end.y))
+            let index = document.index(for: page)
+            if rect.width >= 4, rect.height >= 4, index != NSNotFound { onRedactRect?(index, rect) }
+            return
+        }
         guard inkMode else { super.mouseUp(with: event); return }
         defer { stroke = []; strokePage = nil }
         guard let page = strokePage, let document, stroke.count > 1 else { return }

@@ -35,7 +35,9 @@ enum PDFProcessing {
         let previous = page.displaysAnnotations
         page.displaysAnnotations = includeAnnotations
         defer { page.displaysAnnotations = previous }
-        let image = page.thumbnail(of: NSSize(width: box.width * scale, height: box.height * scale), for: .cropBox)
+        // The thumbnail is upright, so a page rotated by 90 or 270 degrees swaps its sides.
+        let sideways = page.rotation % 180 != 0
+        let image = page.thumbnail(of: NSSize(width: (sideways ? box.height : box.width) * scale, height: (sideways ? box.width : box.height) * scale), for: .cropBox)
         var rect = CGRect(origin: .zero, size: image.size)
         return image.cgImage(forProposedRect: &rect, context: nil, hints: nil)
     }

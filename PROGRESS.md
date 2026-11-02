@@ -13,6 +13,8 @@ Updated: 2026-11-02 (Asia/Singapore). M1 is an internal candidate; acceptance is
 - M2 core features on branch `m2-features` (not merged): OCR, scan compression, form clear/flatten, document info, images to pages, encrypted/unlocked copies, Document menu, Finder Service. See `docs/11-implementation-plan.md`.
 - UI redesign (merged to main): floating Liquid Glass top bar, bottom tool dock and sidebar over an ambient background; new welcome screen and drop overlay. macOS 26+ uses the system glass; macOS 14–25 falls back to materials. Only checked visually on macOS 27 dark mode; light mode and macOS 14–25 fallback are unverified.
 
+- Debug builds honour `MACPDF_APPEARANCE=light|dark` to check both appearances without changing the system setting (`open --env MACPDF_APPEARANCE=light -a MacPDF.app`).
+
 ## Verification
 
 - `python3 scripts/accept-m1.py`: 16 passed, 0 failed, 1 skipped on Apple Silicon/macOS 27; the skipped test requires a mounted isolated external test volume. Full local evidence is in ignored `build/acceptance/`.

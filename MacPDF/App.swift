@@ -13,6 +13,12 @@ struct MacPDFApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        // Lets UI checks run in a fixed appearance without touching the system setting.
+        if let style = ProcessInfo.processInfo.environment["MACPDF_APPEARANCE"] {
+            NSApp.appearance = NSAppearance(named: style == "light" ? .aqua : .darkAqua)
+        }
+        #endif
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
         PDFWindows.shared.showWelcomeIfNeeded()

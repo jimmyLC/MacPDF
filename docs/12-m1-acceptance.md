@@ -30,7 +30,8 @@ The window tests use an isolated PDFWindows instance and suppress presentation, 
 | Force-quit/relaunch recovery | Passed on earlier reader build |
 | Print preview | Passed on earlier reader build |
 | Current window-owner build (Liquid Glass UI): launch, welcome screen, open via Finder-style `open -a`, note tool placement, dirty marker + undo enabled, close prompt (Cancel keeps window, Discard closes) | Passed 2026-11-02, macOS 27 / Apple Silicon, dark mode, via desktop driver |
-| Liquid Glass UI: light mode, macOS 14–25 material fallback, highlight/text box/ink tools, Edit menu actions | Pending |
+| Liquid Glass UI: light mode (forced via `MACPDF_APPEARANCE=light`, debug builds), highlight across three lines, freehand ink, 300-page generated PDF opens in about a second (serialize 0.03 s, search 0.5 s) | Passed 2026-11-02, macOS 27 / Apple Silicon |
+| Liquid Glass UI: macOS 14–25 material fallback, text box tool, page menu actions (rotate/move/delete/merge/extract), Finder drag gesture, real-world PDFs, PDFs of hundreds of MB | Pending |
 | Finder-to-reader drag gesture | Pending |
 
 Earlier manual results are not presented as proof of the changed window shell. Current-shell smoke checks must be rerun once, after desktop automation is available. Do not repeatedly retest all PDF operations through Finder.

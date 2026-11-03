@@ -95,6 +95,21 @@ Known limits:
 - The annotation list sidebar and note reply threads were not built (decided out of scope); signature fields are not filled as form values (the signature is placed over the field).
 - Hand-checked: the watermark/header sheet, the create/combine sheet and the new dock buttons render. Not hand-checked: tabs, the Settings window, share sheet, the inspector and style popover, overwrite-with-backup through a real file panel, and the other new sheets.
 
+## M8 keep it simple (Jimmy's direction, 2026-11-03)
+
+Direction: MacPDF stays small, good-looking and easy. The key jobs are merge/split, OCR, editing recognised text, rotating pages, adding a password, converting to Markdown, and compression; everything runs on this Mac. Not wanted: file info/cleanup, page numbers/stamps, annotation extras, reading extras, other conversions (Word/Excel/RTF), accessibility extras, hard features (form building, find-and-replace in PDF text, PDF/A, large-file paging).
+
+- Common tools: the grid button in the top bar opens eight big buttons: Merge, Split, Rotate, Text, Convert to Markdown, Add password, Compress, Make scans searchable. The "..." menu keeps the rest.
+- Compression: four levels (smallest ~100 dpi, balanced ~150, print ~200, best ~300). It never renders at more detail than a scan really has, counts how many pages a level will touch, reduces scans and pages with large pictures, keeps text searchable, and undoes itself if the file does not get smaller.
+- Text panel (top bar: tools > Text, or Document > Extract and edit text, Option-Command-T): reads the page or all pages. Pages with text in the PDF are read directly (with headings found from font size); pages that are pictures are recognised with the languages chosen in Settings. The text is editable. Scanned pages can write corrections back so search and copy use them (the picture stays, up to 300 dpi); pages that already have text are not changed, edits there only affect Copy and Export. Export: Markdown (.md) or plain text.
+- Markdown: headings from relative text size, bullet and numbered lists, paragraphs from line spacing, CJK lines joined without spaces, `---` between pages. Tables and images are not converted.
+- Convert to Markdown reads every page, then goes straight to the save panel.
+- Pages: Duplicate pages; Split sheet (one file per page, by ranges, or just the selection).
+- Settings: default layout, recent documents kept, OCR languages, reset, About (states that nothing leaves the Mac and Apple Intelligence is not needed).
+- Window size and place are remembered (a frame that is too small or off-screen is ignored); Dock right-click menu (open, create, recent documents).
+- No Apple Foundation Models (AFM) are used. Vision does the recognition, rules do the Markdown. AFM would need macOS 26 and Apple Intelligence; it could improve Markdown structure later as an optional step.
+- Not built: scanning with an iPhone camera (Continuity Camera), which would be a small addition if wanted.
+
 ## Verification and outstanding work
 
 - Signed, sandbox-enabled Apple Silicon debug build and automated tests pass on the development Mac.

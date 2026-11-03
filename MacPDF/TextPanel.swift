@@ -17,6 +17,8 @@ final class TextSession {
     var loading = false
     var progress = (done: 0, total: 0)
     var task: Task<Void, Never>?
+    /// Set by "Convert to Markdown": when reading ends, go straight to the save panel.
+    var autoExport = false
 
     func original(_ page: TextExtraction.PageText) -> String { page.lines.map(\.text).joined(separator: "\n") }
     func text(for page: TextExtraction.PageText) -> String { edits[page.index] ?? original(page) }

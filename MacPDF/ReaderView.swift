@@ -18,6 +18,7 @@ struct ReaderView: View {
     @State private var confirmDelete = false
     @State private var inkMode = false
     @State private var showingStyle = false
+    @State private var showingTools = false
     @State private var search = ""
     @State private var sidebar = true
     @State private var selection: SidebarTab = .pages
@@ -62,6 +63,7 @@ struct ReaderView: View {
             case .build: BuildSheet(model: model) { model.sheet = nil }
             case .blank: BlankPageSheet(model: model) { model.sheet = nil }
             case .ocr: OCRSheet(model: model) { model.sheet = nil }
+            case .split: SplitSheet(model: model) { model.sheet = nil }
             }
         }
         .task(id: model.notice) {
@@ -184,9 +186,8 @@ struct ReaderView: View {
                 GlassIconButton(symbol: "arrow.uturn.backward", label: "復原") { model.undoEdit() }.disabled(!model.canUndo || model.redaction != nil)
                 GlassIconButton(symbol: "arrow.uturn.forward", label: "重做") { model.redoEdit() }.disabled(!model.canRedo || model.redaction != nil)
                 GlassDivider()
-                GlassIconButton(symbol: "text.viewfinder", label: "擷取與編輯文字", active: model.textSession != nil) {
-                    if model.textSession == nil { model.openTextPanel() } else { model.closeTextPanel() }
-                }
+                GlassIconButton(symbol: "square.grid.2x2.fill", label: "常用工具", active: showingTools) { showingTools.toggle() }
+                    .popover(isPresented: $showingTools, arrowEdge: .bottom) { ToolsPopover(model: model) { showingTools = false } }
                 GlassIconButton(symbol: "square.and.arrow.down", label: "另存新檔") { model.saveCopyWithPanel() }.disabled(model.redaction != nil)
                 moreMenu
             }
@@ -227,6 +228,8 @@ struct ReaderView: View {
                 Button(many ? "向後移動選取的頁面" : "向後移動這一頁") { model.moveCurrentPage(by: 1) }.disabled((model.targetPages.last ?? 0) >= model.pageCount - 1)
                 Button(many ? "刪除選取的頁面" : "刪除這一頁", role: .destructive) { confirmDelete = true }.disabled(model.targetPages.count >= model.pageCount)
                 Divider()
+                Button(many ? "複製選取的頁面" : "複製這一頁") { model.duplicateTargets() }
+                Divider()
                 Button("選取全部頁面") { model.selectAllPages() }
                 Button("取消選取") { model.clearPageSelection() }.disabled(model.selectedPages.isEmpty)
             }.disabled(busy)
@@ -251,7 +254,7 @@ struct ReaderView: View {
             Button("塗黑敏感資訊…", systemImage: "rectangle.dashed.badge.record") { model.beginRedaction() }.disabled(busy)
             Menu("文件資訊與保護", systemImage: "lock.shield") {
                 Button("編輯文件資訊…") { model.sheet = .metadata }
-                Button("儲存加密副本…") { model.sheet = .encrypt }
+                Button("加上密碼（存成加密副本）…") { model.sheet = .encrypt }
                 Button("儲存無密碼副本…") { model.exportUnlockedCopy() }.disabled(!(model.document?.isEncrypted ?? false))
             }.disabled(busy)
             Menu("檢視", systemImage: "rectangle.split.2x1") {

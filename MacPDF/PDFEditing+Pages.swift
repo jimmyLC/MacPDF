@@ -109,6 +109,24 @@ extension PDFEditing {
         return placed
     }
 
+    /// Puts a copy of each page right after the last of them, keeping their order.
+    @discardableResult
+    func duplicate(pages: [Int]) throws -> [Int] {
+        var placed: [Int] = []
+        try mutate { doc in
+            let chosen = try Self.cleanPages(pages, count: doc.pageCount)
+            let copies = try chosen.map { index -> PDFPage in
+                guard let copy = doc.page(at: index)?.copy() as? PDFPage else { throw EditError.invalidPage }
+                return copy
+            }
+            let start = chosen[chosen.count - 1] + 1
+            for (offset, copy) in copies.enumerated() { doc.insert(copy, at: start + offset) }
+            placed = (0..<copies.count).map { start + $0 }
+        }
+        reparse()
+        return placed
+    }
+
     /// Writes the chosen pages, in document order, as one new file.
     func extract(pageList: [Int], to url: URL) throws {
         guard !document.isEncrypted else { throw EditError.encryptedInput }

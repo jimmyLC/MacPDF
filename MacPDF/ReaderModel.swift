@@ -128,7 +128,7 @@ final class ReaderModel: NSObject {
         if let activeURL, activeScoped { activeURL.stopAccessingSecurityScopedResource() }
         activeURL = url; activeScoped = scoped; displayName = recoveredTitle
         editor = PDFEditing(document: candidate)
-        document = candidate; pdfView.document = candidate; pdfView.autoScales = true
+        document = candidate; pdfView.document = candidate; setViewMode(Preferences.defaultViewMode)
         pdfView.scrollToTopSoon()
         results = []
         hasSearched = false
@@ -232,6 +232,12 @@ final class ReaderModel: NSObject {
     func selectAllPages() { selectedPages = Set(0..<pageCount) }
     func clearPageSelection() { selectedPages = []; selectionAnchor = nil }
 
+    func duplicateTargets() {
+        let pages = targetPages
+        var placed: [Int] = []
+        edit { placed = try $0.duplicate(pages: pages) }
+        if error == nil, let first = placed.first { selectedPages = Set(placed); goToPage(first + 1); notice = String(format: L("已複製 %ld 頁。"), placed.count) }
+    }
     func rotateTargets(by degrees: Int) { let pages = targetPages; edit { try $0.rotate(pages: pages, by: degrees) } }
     func rotateAll(by degrees: Int) { let all = Array(0..<pageCount); edit { try $0.rotate(pages: all, by: degrees) } }
     func rotateCurrentPage() { let pages = targetPages; edit { try $0.rotate(pages: pages) } }
@@ -620,6 +626,14 @@ final class ReaderModel: NSObject {
         loadText()
     }
 
+    /// Opens the text panel on every page and, when reading is finished, asks where to save the Markdown file.
+    func convertToMarkdown() {
+        if textSession == nil { openTextPanel() }
+        guard let session = textSession else { return }
+        session.autoExport = true
+        setTextScope(.all)
+    }
+
     func closeTextPanel() { textSession?.task?.cancel(); textSession = nil }
     func setTextScope(_ scope: TextScope) { textSession?.scope = scope; loadText() }
     func stopTextLoading() { textSession?.task?.cancel() }
@@ -641,6 +655,10 @@ final class ReaderModel: NSObject {
                 if !result.lines.isEmpty { session.pages.append(result) }
             }
             session?.loading = false
+            if let session, session.autoExport, !Task.isCancelled {
+                session.autoExport = false
+                if session.pages.isEmpty { self?.notice = L("這份文件沒有找到可以轉換的文字。") } else { self?.saveExtractedText(markdown: true) }
+            }
         }
     }
 
@@ -1009,7 +1027,7 @@ final class ReaderModel: NSObject {
             return (try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale)) == url
         }
         entries.insert(bookmark, at: 0)
-        UserDefaults.standard.set(Array(entries.prefix(8)), forKey: recentKey)
+        UserDefaults.standard.set(Array(entries.prefix(Preferences.recentLimit)), forKey: recentKey)
         NotificationCenter.default.post(name: .macpdfRecentsChanged, object: nil)
     }
 }

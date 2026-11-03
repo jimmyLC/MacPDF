@@ -33,6 +33,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let urls = (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
         PDFWindows.shared.open(urls.filter { $0.pathExtension.lowercased() == "pdf" })
     }
+    /// Right-click on the Dock icon: new things and the recent documents.
+    @MainActor func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        let open = NSMenuItem(title: L("開啟 PDF…"), action: #selector(dockOpen), keyEquivalent: ""); open.target = self; menu.addItem(open)
+        let build = NSMenuItem(title: L("建立或組合 PDF…"), action: #selector(dockBuild), keyEquivalent: ""); build.target = self; menu.addItem(build)
+        let recents = ReaderModel.recentURLs().prefix(8)
+        if !recents.isEmpty {
+            menu.addItem(.separator())
+            for url in recents {
+                let item = NSMenuItem(title: url.lastPathComponent, action: #selector(dockRecent(_:)), keyEquivalent: ""); item.target = self
+                item.representedObject = url; menu.addItem(item)
+            }
+        }
+        return menu
+    }
+    @MainActor @objc private func dockOpen() {
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.pdf]; panel.allowsMultipleSelection = true
+        if panel.runModal() == .OK { PDFWindows.shared.open(panel.urls) }
+    }
+    @MainActor @objc private func dockBuild() { PDFWindows.shared.keyModel?.sheet = .build }
+    @MainActor @objc private func dockRecent(_ item: NSMenuItem) { if let url = item.representedObject as? URL { PDFWindows.shared.open([url]) } }
+
     func application(_ sender: NSApplication, open urls: [URL]) {
         PDFWindows.shared.open(urls)
     }
@@ -105,7 +127,10 @@ struct ReaderCommands: Commands {
             Button("實際大小") { PDFWindows.shared.keyModel?.actualSize() }.keyboardShortcut("0", modifiers: [.command, .option])
         }
         CommandMenu("文件") {
+            Button("擷取與編輯文字") { PDFWindows.shared.keyModel?.openTextPanel() }.keyboardShortcut("t", modifiers: [.command, .option])
+            Button("轉成 Markdown…") { PDFWindows.shared.keyModel?.convertToMarkdown() }
             Button("文字辨識（OCR）…") { PDFWindows.shared.keyModel?.sheet = .ocr }
+            Button("拆分…") { PDFWindows.shared.keyModel?.sheet = .split }
             Button("壓縮…") { PDFWindows.shared.keyModel?.sheet = .compress }
             Divider()
             Button("清除表單欄位") { PDFWindows.shared.keyModel?.resetForm() }

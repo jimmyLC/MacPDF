@@ -121,6 +121,14 @@ import PDFKit
         models[ObjectIdentifier(controller)] = model
         OpenDocuments.shared.models.add(model)
         window.center()
+        // The size and place of the last document window come back next time, on the same screen.
+        window.setFrameAutosaveName("MacPDF.document")
+        // A remembered frame that is too small or no longer on any screen is not used.
+        let remembered = window.frame
+        if remembered.width < window.minSize.width || remembered.height < window.minSize.height
+            || !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(remembered) }) {
+            window.setContentSize(NSSize(width: 1100, height: 760)); window.center()
+        }
         if present { controller.showWindow(nil) }
         return controller
     }

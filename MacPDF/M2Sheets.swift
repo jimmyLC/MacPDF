@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum M2Sheet: String, Identifiable {
-    case metadata, encrypt, compress, signature, exportImages, decorate, build, blank, ocr
+    case metadata, encrypt, compress, signature, exportImages, decorate, build, blank, ocr, split
     var id: String { rawValue }
 }
 
@@ -626,6 +626,54 @@ struct OCRSheet: View {
                 }
                 .keyboardShortcut(.defaultAction).prominentGlassButton()
                 .disabled(chosen.isEmpty || (scope == .range && (pages?.isEmpty ?? true)))
+            }
+        }
+    }
+}
+
+struct SplitSheet: View {
+    let model: ReaderModel
+    let close: () -> Void
+    enum Mode: String, Identifiable { case each, ranges, selected; var id: String { rawValue } }
+    @State private var mode = Mode.each
+    @State private var ranges = ""
+
+    var body: some View {
+        SheetFrame(title: "拆分", symbol: "scissors") {
+            Picker("方式", selection: $mode) {
+                Text("每頁一個檔案").tag(Mode.each)
+                Text("依頁碼範圍").tag(Mode.ranges)
+                if !model.selectedPages.isEmpty { Text("選取的頁面").tag(Mode.selected) }
+            }.pickerStyle(.segmented).labelsHidden()
+            switch mode {
+            case .each: Text(String(format: L("把 %ld 頁各存成一個 PDF。"), model.pageCount)).font(.callout).foregroundStyle(.secondary)
+            case .ranges:
+                TextField("例如 1-3, 5, 8-10", text: $ranges).textFieldStyle(.roundedBorder)
+                Text("每個範圍存成一個新的 PDF。").font(.callout).foregroundStyle(.secondary)
+            case .selected: Text(String(format: L("把選取的 %ld 頁存成一個新的 PDF。"), model.selectedPages.count)).font(.callout).foregroundStyle(.secondary)
+            }
+            Text("原來的文件不會被改動，結果都是新檔案，不會覆寫任何檔案。").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
+                Button(mode == .selected ? "存成新檔…" : "選擇資料夾並拆分…") { run() }
+                    .keyboardShortcut(.defaultAction).prominentGlassButton()
+                    .disabled(mode == .ranges && (try? PDFEditing.parseRanges(ranges, pageCount: model.pageCount)) == nil)
+            }
+        }
+    }
+
+    private func run() {
+        let chosen = mode, text = ranges
+        close()
+        DispatchQueue.main.async {
+            switch chosen {
+            case .each: model.splitPages(rangesText: nil)
+            case .ranges: model.splitPages(rangesText: text)
+            case .selected:
+                let panel = NSSavePanel(); panel.allowedContentTypes = [.pdf]; panel.nameFieldStringValue = "MacPDF-擷取.pdf"
+                panel.message = L("請選擇新的檔名；MacPDF 不會覆寫現有檔案。")
+                if panel.runModal() == .OK, let url = panel.url { model.extractSelectedPages(to: url) }
             }
         }
     }

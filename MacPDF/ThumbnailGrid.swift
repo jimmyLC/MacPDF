@@ -61,6 +61,7 @@ struct ThumbnailGrid: View {
             Button(model.targetPages.count > 1 ? "刪除選取的頁面" : "刪除這一頁", role: .destructive) { ensureSelected(index); model.deleteCurrentPage() }
                 .disabled(model.pageCount <= 1)
             Divider()
+            Button(model.targetPages.count > 1 ? "複製選取的頁面" : "複製這一頁") { ensureSelected(index); model.duplicateTargets() }
             Button("擷取頁面為新檔案…") { ensureSelected(index); extract() }
             Button("匯出為圖片…") { ensureSelected(index); exportImages() }
             Divider()

@@ -132,4 +132,13 @@ final class M8Tests: XCTestCase {
         let longSide = max(rebuilt.bounds(for: .cropBox).width, rebuilt.bounds(for: .cropBox).height)
         XCTAssertLessThanOrEqual(CGFloat(max(after.width, after.height)) / (longSide / 72), effective + 8, "no more detail than the scan had")
     }
+
+    func testDuplicatingPages() throws {
+        let edit = PDFEditing(document: try M3Tests().textDocument([["one"], ["two"], ["three"]]))
+        let placed = try edit.duplicate(pages: [0, 1])
+        XCTAssertEqual(placed, [2, 3])
+        XCTAssertEqual((0..<5).map { (edit.document.page(at: $0)?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }, ["one", "two", "one", "two", "three"])
+        try edit.undo(); XCTAssertEqual(edit.document.pageCount, 3)
+        XCTAssertThrowsError(try edit.duplicate(pages: [7]))
+    }
 }

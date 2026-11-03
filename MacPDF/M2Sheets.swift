@@ -101,31 +101,53 @@ struct CompressSheet: View {
     let model: ReaderModel
     let close: () -> Void
     @State private var preset = PDFProcessing.Preset.standard
+    @State private var eligible: [PDFProcessing.Preset: Int] = [:]
+
+    private struct Option { let preset: PDFProcessing.Preset; let name: LocalizedStringKey; let detail: LocalizedStringKey; let symbol: String }
+    private let options = [
+        Option(preset: .small, name: "最小檔案", detail: "約 100 dpi，用來寄信或上傳，細節會變粗", symbol: "envelope"),
+        Option(preset: .standard, name: "平衡", detail: "約 150 dpi，大多數文件的好選擇", symbol: "doc.text"),
+        Option(preset: .high, name: "列印", detail: "約 200 dpi，印出來依然清楚", symbol: "printer"),
+        Option(preset: .best, name: "高品質", detail: "約 300 dpi，幾乎看不出差別", symbol: "sparkles"),
+    ]
 
     var body: some View {
-        SheetFrame(title: "壓縮掃描頁面", symbol: "arrow.down.right.and.arrow.up.left") {
-            Picker("品質", selection: $preset) {
-                Text("高品質").tag(PDFProcessing.Preset.high)
-                Text("標準").tag(PDFProcessing.Preset.standard)
-                Text("最小檔案").tag(PDFProcessing.Preset.small)
-            }.pickerStyle(.segmented).labelsHidden()
-            Text(detail).font(.callout).foregroundStyle(.secondary)
-            Text("只會處理整頁都是圖片的掃描頁面，並保留可搜尋的文字；其他頁面保持不變。可以復原。").font(.callout).foregroundStyle(.secondary)
+        SheetFrame(title: "壓縮 PDF", symbol: "arrow.down.right.and.arrow.up.left") {
+            VStack(spacing: 8) {
+                ForEach(options, id: \.preset) { option in
+                    Button { preset = option.preset } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: option.symbol).frame(width: 24).foregroundStyle(preset == option.preset ? Color.accentColor : .secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(option.name).font(.system(size: 13, weight: .semibold))
+                                Text(option.detail).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: preset == option.preset ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(preset == option.preset ? Color.accentColor : .secondary)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 9)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(preset == option.preset ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.05)))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text(summary).font(.callout).foregroundStyle(.secondary)
             HStack {
                 Spacer()
                 Button("取消", role: .cancel) { close() }.keyboardShortcut(.cancelAction)
                 Button("開始壓縮") { let chosen = preset; close(); model.compress(chosen) }
-                    .keyboardShortcut(.defaultAction).prominentGlassButton()
+                    .keyboardShortcut(.defaultAction).prominentGlassButton().disabled((eligible[preset] ?? 1) == 0)
             }
         }
+        .onAppear { eligible = model.compressiblePageCounts() }
     }
 
-    private var detail: LocalizedStringKey {
-        switch preset {
-        case .high: "約 200 dpi，適合需要細看的文件。"
-        case .standard: "約 150 dpi，大多數情況的平衡選擇。"
-        case .small: "約 100 dpi，檔案最小，細節會變粗。"
-        }
+    private var summary: String {
+        let count = eligible[preset] ?? 0
+        return count == 0 ? L("這份文件沒有可以再壓縮的頁面。")
+            : String(format: L("會處理 %ld 頁的圖片，文字仍可搜尋與選取；其他頁面不動。壓縮後如果沒有變小，會自動還原。可以復原。"), count)
     }
 }
 

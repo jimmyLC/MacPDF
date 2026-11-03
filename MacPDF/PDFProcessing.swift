@@ -13,10 +13,10 @@ enum PDFProcessing {
     }
 
     enum Preset: String, CaseIterable, Identifiable {
-        case high, standard, small
+        case small, standard, high, best
         var id: String { rawValue }
-        var dpi: CGFloat { switch self { case .high: 200; case .standard: 150; case .small: 100 } }
-        var quality: CGFloat { switch self { case .high: 0.75; case .standard: 0.6; case .small: 0.45 } }
+        var dpi: CGFloat { switch self { case .small: 100; case .standard: 150; case .high: 200; case .best: 300 } }
+        var quality: CGFloat { switch self { case .small: 0.45; case .standard: 0.6; case .high: 0.75; case .best: 0.85 } }
     }
 
     static let ocrScale: CGFloat = 2.5
@@ -96,7 +96,7 @@ enum PDFProcessing {
         return finish(data as Data, carrying: page, cropOrigin: box.origin)
     }
 
-    private static func drawInvisibleText(_ lines: [TextLine], in context: CGContext, size: CGSize) {
+    static func drawInvisibleText(_ lines: [TextLine], in context: CGContext, size: CGSize) {
         context.setTextDrawingMode(.invisible)
         for line in lines {
             let rect = CGRect(x: line.box.minX * size.width, y: line.box.minY * size.height,
@@ -126,22 +126,21 @@ enum PDFProcessing {
         }
     }
 
-    /// True when one embedded image is big enough to be the whole page, as in a scan.
-    @MainActor static func isImageDominant(_ page: PDFPage) -> Bool {
-        guard let ref = page.pageRef, var node = ref.dictionary else { return false }
-        let box = page.bounds(for: .cropBox)
+    /// The pixel size of the biggest picture stored on the page, if any.
+    @MainActor static func largestImage(on page: PDFPage) -> (width: Int, height: Int)? {
+        guard let ref = page.pageRef, var node = ref.dictionary else { return nil }
         var resources: CGPDFDictionaryRef?
         // Resources may be inherited from a parent page-tree node.
         for _ in 0..<12 {
             if CGPDFDictionaryGetDictionary(node, "Resources", &resources) { break }
             var parent: CGPDFDictionaryRef?
-            guard CGPDFDictionaryGetDictionary(node, "Parent", &parent), let next = parent else { return false }
+            guard CGPDFDictionaryGetDictionary(node, "Parent", &parent), let next = parent else { return nil }
             node = next
         }
         var xObjects: CGPDFDictionaryRef?
-        guard let resources, CGPDFDictionaryGetDictionary(resources, "XObject", &xObjects), let xObjects else { return false }
-        final class Box { var largest = 0 }
-        let result = Box()
+        guard let resources, CGPDFDictionaryGetDictionary(resources, "XObject", &xObjects), let xObjects else { return nil }
+        final class Best { var width = 0, height = 0 }
+        let best = Best()
         CGPDFDictionaryApplyBlock(xObjects, { _, object, info in
             var stream: CGPDFStreamRef?
             guard CGPDFObjectGetValue(object, .stream, &stream), let stream, let dict = CGPDFStreamGetDictionary(stream) else { return true }
@@ -149,11 +148,36 @@ enum PDFProcessing {
             guard CGPDFDictionaryGetName(dict, "Subtype", &subtype), let subtype, String(cString: subtype) == "Image" else { return true }
             var width: CGPDFInteger = 0, height: CGPDFInteger = 0
             CGPDFDictionaryGetInteger(dict, "Width", &width); CGPDFDictionaryGetInteger(dict, "Height", &height)
-            let box = Unmanaged<Box>.fromOpaque(info!).takeUnretainedValue()
-            box.largest = max(box.largest, Int(width) * Int(height))
+            let box = Unmanaged<Best>.fromOpaque(info!).takeUnretainedValue()
+            if Int(width) * Int(height) > box.width * box.height { box.width = Int(width); box.height = Int(height) }
             return true
-        }, Unmanaged.passUnretained(result).toOpaque())
-        return CGFloat(result.largest) >= 0.5 * box.width * box.height
+        }, Unmanaged.passUnretained(best).toOpaque())
+        return best.width > 0 ? (best.width, best.height) : nil
+    }
+
+    /// True when one embedded image is big enough to be the whole page, as in a scan.
+    @MainActor static func isImageDominant(_ page: PDFPage) -> Bool {
+        guard let image = largestImage(on: page) else { return false }
+        let box = page.bounds(for: .cropBox)
+        return CGFloat(image.width * image.height) >= 0.5 * box.width * box.height
+    }
+
+    /// A scan, or a page that carries a picture with clearly more detail than `preset` keeps.
+    @MainActor static func shouldCompress(_ page: PDFPage, preset: Preset) -> Bool {
+        if isImageDominant(page) { return true }
+        guard let image = largestImage(on: page) else { return false }
+        let box = page.bounds(for: .cropBox)
+        let perPoint = preset.dpi / 72
+        return CGFloat(image.width * image.height) > 0.6 * perPoint * perPoint * box.width * box.height * 0.5
+            && max(image.width, image.height) > Int(preset.dpi * 3)
+    }
+
+    /// Resolution a page-wide picture really has, so compressing never invents detail it did not have.
+    @MainActor static func effectiveDPI(of page: PDFPage) -> CGFloat? {
+        guard isImageDominant(page), let image = largestImage(on: page) else { return nil }
+        let box = page.bounds(for: .cropBox)
+        let longSide = max(box.width, box.height)
+        return longSide > 0 ? CGFloat(max(image.width, image.height)) / (longSide / 72) : nil
     }
 
     // MARK: Compression
@@ -161,7 +185,9 @@ enum PDFProcessing {
     /// Re-encodes a scanned page as a down-sampled JPEG page of the same size.
     @MainActor static func compressedPage(from page: PDFPage, preset: Preset) -> PDFPage? {
         let box = page.bounds(for: .cropBox)
-        let scale = preset.dpi / 72
+        // Never render at more detail than the page's own picture has (and never below a legible 72 dpi).
+        let target = min(preset.dpi, max(effectiveDPI(of: page) ?? preset.dpi, 72))
+        let scale = target / 72
         guard let rendered = renderImage(of: page, scale: scale),
               let jpeg = jpegImage(from: rendered, quality: preset.quality) else { return nil }
         // The thumbnail already honours /Rotate, so the new page is upright.
@@ -218,7 +244,7 @@ enum PDFProcessing {
 
     // MARK: Shared
 
-    private static func jpegImage(from image: CGImage, quality: CGFloat) -> CGImage? {
+    static func jpegImage(from image: CGImage, quality: CGFloat) -> CGImage? {
         // Flatten onto white so transparency does not turn black in JPEG.
         guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) else { return nil }
@@ -231,7 +257,7 @@ enum PDFProcessing {
         return CGImage(jpegDataProviderSource: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 
-    private static func pdfData(size: CGSize, draw: (CGContext) -> Void) -> Data? {
+    static func pdfData(size: CGSize, draw: (CGContext) -> Void) -> Data? {
         var mediaBox = CGRect(origin: .zero, size: size)
         let data = NSMutableData()
         guard let consumer = CGDataConsumer(data: data), let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }

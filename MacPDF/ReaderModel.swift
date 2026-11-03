@@ -54,6 +54,7 @@ final class ReaderModel: NSObject {
     var notice: String?
     var sheet: M2Sheet?
     private(set) var redaction: RedactionSession?
+    private(set) var textSession: TextSession?
     private var jobTask: Task<Void, Never>?
     private var formSnapshotTask: Task<Void, Never>?
 
@@ -604,6 +605,95 @@ final class ReaderModel: NSObject {
         return (0..<probe.pageCount).filter { index in probe.page(at: index).map { !PDFProcessing.hasText($0) } ?? false }
     }
 
+    // MARK: Text panel
+
+    /// Languages for recognising scans (Settings). Traditional Chinese and English by default.
+    var ocrLanguages: [String] {
+        let saved = UserDefaults.standard.stringArray(forKey: "ocrLanguages") ?? []
+        return saved.isEmpty ? PDFProcessing.defaultOCRLanguages : saved
+    }
+
+    func openTextPanel() {
+        guard document != nil, textSession == nil, redaction == nil else { return }
+        setInspectMode(false)
+        textSession = TextSession()
+        loadText()
+    }
+
+    func closeTextPanel() { textSession?.task?.cancel(); textSession = nil }
+    func setTextScope(_ scope: TextScope) { textSession?.scope = scope; loadText() }
+    func stopTextLoading() { textSession?.task?.cancel() }
+
+    /// Reads the text of the page on screen, or of every page. Pages that are only pictures are recognised.
+    private func loadText() {
+        guard let document, let session = textSession else { return }
+        session.task?.cancel()
+        let indices = session.scope == .page ? [max(currentPage - 1, 0)] : Array(0..<document.pageCount)
+        let withoutText = Set(pagesWithoutEmbeddedText())
+        let languages = ocrLanguages
+        session.pages = []; session.edits = [:]
+        session.loading = true; session.progress = (0, indices.count)
+        session.task = Task { [weak self, weak session] in
+            for (n, index) in indices.enumerated() {
+                guard let session, !Task.isCancelled, let page = self?.document?.page(at: index) else { break }
+                session.progress = (n, indices.count)
+                let result = await TextExtraction.extract(page: page, index: index, languages: languages, hasEmbeddedText: !withoutText.contains(index))
+                if !result.lines.isEmpty { session.pages.append(result) }
+            }
+            session?.loading = false
+        }
+    }
+
+    private var exportedPages: [TextExtraction.PageText] { textSession?.current ?? [] }
+
+    func copyExtractedText() {
+        let text = TextExtraction.plainText(exportedPages)
+        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
+        notice = L("已複製文字。")
+    }
+
+    func saveExtractedText(markdown: Bool) {
+        let text = markdown ? TextExtraction.markdown(exportedPages) : TextExtraction.plainText(exportedPages)
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [markdown ? UTType(filenameExtension: "md") ?? .plainText : .plainText]
+        let base = (sourceURL?.deletingPathExtension().lastPathComponent ?? title.replacingOccurrences(of: ".pdf", with: ""))
+        panel.nameFieldStringValue = base + (markdown ? ".md" : ".txt")
+        panel.message = L("請選擇新的檔名；MacPDF 不會覆寫現有檔案。")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do { try Data(text.utf8).write(to: url, options: .withoutOverwriting); notice = L("已匯出文字。") }
+        catch { self.error = L("無法儲存：同名檔案已存在，或這個位置不能寫入。") }
+    }
+
+    /// Scanned pages whose text was edited without adding or removing lines, so each line still has its place.
+    private var correctablePages: [TextExtraction.PageText] {
+        guard let session = textSession else { return [] }
+        return session.current.filter { page in
+            guard page.recognised, let original = session.pages.first(where: { $0.index == page.index }) else { return false }
+            return session.isEdited(original) && page.lines.count == original.lines.count
+        }
+    }
+    var canApplyTextCorrections: Bool { !correctablePages.isEmpty && jobTask == nil }
+
+    func applyTextCorrections() {
+        let pages = correctablePages
+        guard !pages.isEmpty, let document else { return }
+        var rebuilt: [Int: PDFPage] = [:]
+        for page in pages {
+            guard let original = document.page(at: page.index), let new = TextExtraction.correctedPage(from: original, lines: page.lines) else { continue }
+            rebuilt[page.index] = new
+        }
+        guard !rebuilt.isEmpty else { error = L("這些頁面無法寫回（旋轉過的頁面請先轉正）。"); return }
+        let indices = Set(rebuilt.keys)
+        edit { try $0.replace(pages: rebuilt) }
+        if error == nil {
+            notice = String(format: L("已把修改寫回 %ld 頁，現在搜尋與複製會是修改後的文字。"), rebuilt.count)
+            // The panel now shows the corrected text as the starting point.
+            if let session = textSession { session.edits = session.edits.filter { !indices.contains($0.key) }; loadText() }
+        }
+    }
+
     func runOCR(languages: [String] = PDFProcessing.defaultOCRLanguages, pages requested: [Int]? = nil) {
         guard let document, jobTask == nil else { return }
         let withoutText = Set(pagesWithoutEmbeddedText())
@@ -647,10 +737,18 @@ final class ReaderModel: NSObject {
         return pages.count > 8 ? shown + "…" : shown
     }
 
+    /// How many pages each quality level would touch, for the compress sheet.
+    func compressiblePageCounts() -> [PDFProcessing.Preset: Int] {
+        guard let document else { return [:] }
+        return Dictionary(uniqueKeysWithValues: PDFProcessing.Preset.allCases.map { preset in
+            (preset, (0..<document.pageCount).filter { document.page(at: $0).map { PDFProcessing.shouldCompress($0, preset: preset) } ?? false }.count)
+        })
+    }
+
     func compress(_ preset: PDFProcessing.Preset) {
         guard let document, jobTask == nil else { return }
-        let candidates = (0..<document.pageCount).filter { document.page(at: $0).map { PDFProcessing.isImageDominant($0) } ?? false }
-        guard !candidates.isEmpty else { notice = L("沒有可壓縮的掃描頁面。"); return }
+        let candidates = (0..<document.pageCount).filter { document.page(at: $0).map { PDFProcessing.shouldCompress($0, preset: preset) } ?? false }
+        guard !candidates.isEmpty else { notice = L("沒有需要壓縮的頁面（這份文件的圖片已經夠小）。"); return }
         let start = revision
         let before = document.dataRepresentation()?.count ?? 0
         job = JobProgress(title: L("壓縮中"), done: 0, total: candidates.count)

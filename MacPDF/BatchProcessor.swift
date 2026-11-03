@@ -37,7 +37,7 @@ enum BatchProcessor {
             let current = editor.document
             var rebuilt: [Int: PDFPage] = [:]
             for index in 0..<current.pageCount {
-                guard let page = current.page(at: index), PDFProcessing.isImageDominant(page),
+                guard let page = current.page(at: index), PDFProcessing.shouldCompress(page, preset: options.preset),
                       let new = PDFProcessing.compressedPage(from: page, preset: options.preset) else { continue }
                 rebuilt[index] = new
                 try Task.checkCancellation()

@@ -119,6 +119,12 @@ struct ReaderView: View {
                 }
             }
             topBar
+            if let session = model.textSession {
+                TextPanel(model: model, session: session)
+                    .padding(.trailing, 12).padding(.top, barTop + barHeight + 8).padding(.bottom, 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
             if model.inspectMode {
                 AnnotationInspector(model: model)
                     .padding(.trailing, 12).padding(.top, barTop + barHeight + 8)
@@ -178,6 +184,9 @@ struct ReaderView: View {
                 GlassIconButton(symbol: "arrow.uturn.backward", label: "復原") { model.undoEdit() }.disabled(!model.canUndo || model.redaction != nil)
                 GlassIconButton(symbol: "arrow.uturn.forward", label: "重做") { model.redoEdit() }.disabled(!model.canRedo || model.redaction != nil)
                 GlassDivider()
+                GlassIconButton(symbol: "text.viewfinder", label: "擷取與編輯文字", active: model.textSession != nil) {
+                    if model.textSession == nil { model.openTextPanel() } else { model.closeTextPanel() }
+                }
                 GlassIconButton(symbol: "square.and.arrow.down", label: "另存新檔") { model.saveCopyWithPanel() }.disabled(model.redaction != nil)
                 moreMenu
             }

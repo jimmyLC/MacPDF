@@ -24,7 +24,7 @@ Updated: 2026-11-02 (Asia/Singapore). M1 is an internal candidate; acceptance is
 - M6: thumbnail multi-select and drag reorder, export pages as images are merged to main.
 - M7: remaining PRD P0 items (view modes, search options, recents, share, settings, tabs, decorations, build/combine, blank page options, rotate angles, TIFF, annotation styles and inspector, OCR options, overwrite with backup) are on branch `m7-p0`.
 
-- M8 (simple tools, text panel, Markdown, compression levels, settings) is on branch `m8-simple`, which sits on top of `m7-p0`; neither is merged yet.
+- M8 (simple tools, text panel, Markdown, compression levels, settings) is merged to main (with M7). iPhone camera scanning is deliberately not planned.
 
 ## Verification
 
